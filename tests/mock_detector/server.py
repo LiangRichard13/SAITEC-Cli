@@ -282,13 +282,17 @@ async def _evaluate_llm(record: dict[str, Any]) -> dict[str, Any]:
         return _result("error", None,
                        {"reason": f"llm_bad_response: {content[:120]}", "model": LLM_MODEL})
 
-    # 结论落缓存：该会话的每个前缀 hash（含全量）都指向本次综合结论
+    # 结论落缓存：只写本次实际送审的新前缀（chain[known:]）。
+    # 缓存值的语义是"审到该轮时该前缀自身的判定"——已审前缀的结论
+    # 不得回写覆写，否则 redo 重报历史记录时 full-hit 会复用被污染的结论
+    #（旧记录本身 clean，却被后来轮次的 violation 覆盖成异常）。
     if chain:
-        if len(_prefix_cache) + len(chain) > _PREFIX_CACHE_LIMIT:
+        new_chain = chain[known:]
+        if len(_prefix_cache) + len(new_chain) > _PREFIX_CACHE_LIMIT:
             _prefix_cache.clear()
         entry = {"status": status, "risk_level": verdict.get("risk_level"),
                  "reason": verdict.get("reason", ""), "turns": len(messages)}
-        for h in chain:
+        for h in new_chain:
             _prefix_cache[h] = entry
 
     return _result(status, verdict.get("risk_level"),
