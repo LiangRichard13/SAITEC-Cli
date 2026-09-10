@@ -75,16 +75,23 @@ def purge(
                 if not dry_run:
                     f.unlink(missing_ok=True)
 
-    # 3. SQLite：删除 timestamp < cutoff 的记录
-    if db_path.exists() and not dry_run:
+    # 3. SQLite：删除 timestamp < cutoff 的记录（dry-run 只统计不删）
+    if db_path.exists():
         try:
             with sqlite3.connect(db_path) as conn:
-                cur = conn.execute(
-                    "DELETE FROM detection_results WHERE timestamp < ?",
-                    (cutoff.isoformat(),),
-                )
-                removed_rows = cur.rowcount
-                conn.commit()
+                if dry_run:
+                    cur = conn.execute(
+                        "SELECT COUNT(*) FROM detection_results WHERE timestamp < ?",
+                        (cutoff.isoformat(),),
+                    )
+                    removed_rows = cur.fetchone()[0]
+                else:
+                    cur = conn.execute(
+                        "DELETE FROM detection_results WHERE timestamp < ?",
+                        (cutoff.isoformat(),),
+                    )
+                    removed_rows = cur.rowcount
+                    conn.commit()
         except sqlite3.Error:
             removed_rows = 0
 
