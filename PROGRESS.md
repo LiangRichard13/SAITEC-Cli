@@ -5,6 +5,14 @@
 
 ## 2026-09-10
 
+### fix(mock): 前缀缓存只写新前缀，防 redo 复用被污染结论 <f88ba46>
+Richard 报告 redo 把历史 clean 记录误标异常。根因在 detector 侧前缀去重缓存：原实现把"本次综合结论"写到会话每个前缀 hash 上，第 2 轮 partial hit 判出 violation 时覆写第 1 轮前缀的 clean，redo 重报旧记录走 full-hit 复用被污染缓存。mock_detector 落缓存改为 `chain[known:]`（仅新增轮次前缀），缓存语义修正为"审到第 k 轮时该前缀自身的判定"；detector-api.md 附录同步修正并把"禁止回写旧前缀"列为要点首条（云端真实检测服务器的实现依据）。+1 回归测试（clean → 次轮违规 → 重放断言）。
+教训: ssgc 侧先自证清白再向外找——核查 redo（JSONL 重建该记录自身快照）与 reporter（只发本条 asdict）后确认上报链路干净，问题在 detector 侧缓存；"参考实现 + 契约建议文档"会被对接方照抄，示例代码里的语义缺陷会传染到真实服务。
+
+### fix(store): save_results 改 INSERT OR REPLACE 支持 redo 更新结论 <c0e2265>
+原实现普通 INSERT（docstring 写 INSERT OR IGNORE，两者均与行为不符），redo 新结论写本地撞 record_id UNIQUE 无法更新已有行。改 OR REPLACE：重复上报幂等不增行，redo/detector 修正判定后重报即生效。+1 覆盖更新用例。
+教训: docstring 声称的幂等语义要和 SQL 实现对过才可信——"文档说 OR IGNORE、代码是裸 INSERT"这种不一致，直到用户真实触发 redo 更新场景才暴露。
+
 ### fix(cli): init 交互输入 api_key 改为明文回显 <03438c7>
 Richard 反馈交互式 init 输入 X-API-Key 时终端不回显，输错无法察觉。删除 `_prompt` 的 secret 分支（getpass.getpass），api_key 走普通 input 回显；非 TTY 自动化路径、`--api-key` 参数、`SSGC_API_KEY` 注入均不受影响。CLI 77 绿 + 全量 251 绿。
 
