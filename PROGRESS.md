@@ -3,6 +3,15 @@
 > 倒序时间线。格式约定见 [AGENTS.md](AGENTS.md) §5。接手 Agent 先读本文件建立上下文。
 > 条目与 commit 一一对应；`教训:` 行是防重踩的关键。
 
+## 2026-09-10
+
+### fix(cli): init 交互输入 api_key 改为明文回显 <03438c7>
+Richard 反馈交互式 init 输入 X-API-Key 时终端不回显，输错无法察觉。删除 `_prompt` 的 secret 分支（getpass.getpass），api_key 走普通 input 回显；非 TTY 自动化路径、`--api-key` 参数、`SSGC_API_KEY` 注入均不受影响。CLI 77 绿 + 全量 251 绿。
+
+### fix(cli): purge --dry-run 预览 SQLite 待删行数 <492a582>
+原实现 `if db_path.exists() and not dry_run` 使 dry-run 完全跳过 SQLite 查询，`removed_sqlite_rows` 恒为 0，与 JSONL/日志可预览不一致。改为 dry-run 用 `SELECT COUNT(*)` 统计，实测 retention 0 正确报 7 行且未真删。
+教训: purge 只清"超过保留期"的数据（JSONL 严格 `<` cutoff、活跃 ssgc.log 永不删、切割备份须跨午夜才产生）——当天活跃数据为空是正确行为；极端清理用 `--retention-days -1`（cutoff 落到明天，天然包含当天），但服务运行中删当天 JSONL 会因句柄占用失败，先 stop 再清。
+
 ## 2026-09-03
 
 ### refactor: 清理注释中的任务编号与过时骨架期标记 <3d34b34>
