@@ -51,18 +51,13 @@ def _build_default_config(
     }
 
 
-def _prompt(prompt: str, default: str = "", secret: bool = False) -> str:
+def _prompt(prompt: str, default: str = "") -> str:
     """交互式提示；非 TTY 时直接用默认值（便于自动化）"""
     if not sys.stdin.isatty():
         return default
     suffix = "" if not default else f" [{default}]"
     try:
-        import getpass
-
-        if secret:
-            value = getpass.getpass(f"{prompt}{suffix}: ")
-        else:
-            value = input(f"{prompt}{suffix}: ").strip()
+        value = input(f"{prompt}{suffix}: ").strip()
     except (EOFError, KeyboardInterrupt):
         return default
     return value or default
@@ -159,7 +154,7 @@ def init_cmd(
         detector_url = _prompt("检测服务器地址 (detector URL)", default="http://detector:8080")
     # 2. api_key：--api-key > 交互
     if api_key is None:
-        api_key = _prompt("X-API-Key", secret=True)
+        api_key = _prompt("X-API-Key")
     # 3. upstream：--upstream > 交互（TTY）> 报错（非 TTY）
     if upstream is None:
         upstream = _prompt(
