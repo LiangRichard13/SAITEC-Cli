@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 """
 
 _INSERT_RESULT_SQL = """
-INSERT INTO detection_results (
+INSERT OR REPLACE INTO detection_results (
     record_id, service, endpoint_type, upstream, timestamp, detected_at,
     model, prompt_tokens, completion_tokens,
     status_code, latency_ms, finish_reason,
@@ -159,9 +159,10 @@ class Store:
     # ============================================================
 
     async def save_results(self, results: list[DetectionResult]) -> None:
-        """写入检测结果（按 `record_id` UNIQUE 约束去重）
+        """写入检测结果（按 `record_id` UNIQUE 约束 upsert）
 
-        使用 `INSERT OR IGNORE`，重复上报安全（幂等）。
+        使用 `INSERT OR REPLACE`：重复上报安全（幂等不增行），且 redo 等
+        重报场景拿到新结论时能覆盖本地旧结论（detector 修正判定后重报即生效）。
         """
         if not results:
             return

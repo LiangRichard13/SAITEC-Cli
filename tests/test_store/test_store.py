@@ -1,6 +1,7 @@
 """Store（SQLite 检测结果库）测试"""
 from __future__ import annotations
 
+import dataclasses
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -95,12 +96,31 @@ async def test_save_and_query_one(db_path: Path, sample_result: DetectionResult)
 
 
 async def test_save_idempotent(db_path: Path, sample_result: DetectionResult) -> None:
-    """重复保存应去重（record_id UNIQUE）"""
+    """重复保存相同结论不增行（record_id UNIQUE + OR REPLACE 幂等）"""
     store = Store(db_path)
     await store.save_results([sample_result])
     await store.save_results([sample_result])  # 第二次
     results = await store.query(since=datetime(2026, 8, 14))
     assert len(results) == 1
+
+
+async def test_save_replace_updates_conclusion(db_path: Path, sample_result: DetectionResult) -> None:
+    """redo 场景：同 record_id 拿到新结论时应覆盖本地旧结论"""
+    store = Store(db_path)
+    await store.save_results([sample_result])
+    updated = dataclasses.replace(
+        sample_result,
+        detection_status="violation",
+        risk_level="high",
+        detection_detail={"score": 0.9, "reason": "leak"},
+        detected_at="2026-08-14T12:00:02Z",
+    )
+    await store.save_results([updated])
+    results = await store.query(since=datetime(2026, 8, 14))
+    assert len(results) == 1
+    assert results[0].detection_status == "violation"
+    assert results[0].risk_level == "high"
+    assert results[0].detection_detail == {"score": 0.9, "reason": "leak"}
 
 
 async def test_save_empty_list(db_path: Path) -> None:
