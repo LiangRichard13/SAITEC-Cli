@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from ssgc.cli.main import app
-from ssgc.core.models import DetectionResult, Record
-from ssgc.store.store import Store
+from saitec_cli.cli.main import app
+from saitec_cli.core.models import DetectionResult, Record
+from saitec_cli.store.store import Store
 
 runner = CliRunner()
 
@@ -68,7 +68,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     """隔离配置目录：预置 4 条结论（3 异常 1 clean）+ v-1 的 JSONL 原始记录"""
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
-    monkeypatch.setenv("SSGC_CONFIG", str(cfg_dir / "config.json"))
+    monkeypatch.setenv("SAITEC_CLI_CONFIG", str(cfg_dir / "config.json"))
     db_path = cfg_dir / "results.db"
     _seed(db_path)
     _seed_jsonl(cfg_dir / "records", "v-1")
@@ -200,6 +200,6 @@ def test_export_json_summary(env: tuple) -> None:
 
 
 def test_export_no_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SSGC_CONFIG", str(tmp_path / "none" / "config.json"))
+    monkeypatch.setenv("SAITEC_CLI_CONFIG", str(tmp_path / "none" / "config.json"))
     result = runner.invoke(app, ["export", "--json"])
     assert result.exit_code != 0

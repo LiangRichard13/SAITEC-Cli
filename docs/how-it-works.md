@@ -10,7 +10,7 @@
 ## 1. 一图看懂
 
 ```
-你的客户端                ssgc（本机）                          外部
+你的客户端                saitec-cli（本机）                          外部
 ─────────              ────────────────────                    ────
 Claude Code ──请求──→ ① 本地代理端口(9001..)
                         │  透明转发（不动内容）
@@ -35,7 +35,7 @@ Claude Code ──请求──→ ① 本地代理端口(9001..)
 
 ## 2. 六层架构：谁在干什么
 
-代码在 `src/ssgc/` 下分六层，**依赖严格单向：上层只能 import 下层**（cli → runtime → proxy/adapters → recorder·reporter·store → core）。这条铁律让改动的影响范围可预测。
+代码在 `src/saitec_cli/` 下分六层，**依赖严格单向：上层只能 import 下层**（cli → runtime → proxy/adapters → recorder·reporter·store → core）。这条铁律让改动的影响范围可预测。
 
 | 层 | 目录 | 一句话职责 | 通俗理解 |
 |---|---|---|---|
@@ -59,7 +59,7 @@ Claude Code ──请求──→ ① 本地代理端口(9001..)
 **第 1 步：进代理（`proxy/server.py`）**
 代理在本机 9001 端口起了个 aiohttp 服务器，catch-all 路由——任何路径任何方法都接。
 真实转发地址 = `upstream + 客户端请求的原始路径`（纯前缀拼接，不改写路径）。
-请求头里只剥掉 `Host`/`Content-Length`/`Transfer-Encoding`（这三个描述"这一跳"的连接，透传无意义），其余原样带上去——包括你客户端的 `Authorization`，所以 ssgc 自己不做任何鉴权。
+请求头里只剥掉 `Host`/`Content-Length`/`Transfer-Encoding`（这三个描述"这一跳"的连接，透传无意义），其余原样带上去——包括你客户端的 `Authorization`，所以 saitec-cli 自己不做任何鉴权。
 
 **第 2 步：转发上游，拿到响应**
 分两条路：
@@ -83,8 +83,8 @@ runtime 的循环每隔几秒调 `recorder.flush()`：从队列取一批（≤ba
 服务端返回每条记录的结论（`results` 数组，靠 `record_id` 关联回来）。
 
 **第 7 步：结论入库（`store/store.py`）**
-结论 + Record 的元信息写进 `~/.ssgc/results.db` 的 `detection_results` 表（对 `record_id` 做 UPSERT，重复上报安全）。
-你跑 `ssgc report` 查的就是这张表。
+结论 + Record 的元信息写进 `~/.saitec-cli/results.db` 的 `detection_results` 表（对 `record_id` 做 UPSERT，重复上报安全）。
+你跑 `saitec-cli report` 查的就是这张表。
 
 至此一个请求走完，通常在第 5 步后 0~60 秒内完成全部落库。
 
@@ -96,20 +96,20 @@ runtime 的循环每隔几秒调 `recorder.flush()`：从队列取一批（≤ba
 
 同一个配置项可以从三个地方给值，优先级 **命令行参数 > 环境变量 > config.json**。
 
-- `config.json`（`~/.ssgc/config.json`）是基底，`init` / `config set` / `service add` 写的都是它
-- 环境变量族 `SSGC_*`（如 `SSGC_REPORT_INTERVAL`）临时盖一层，不落盘
-- 命令行参数（如 `ssgc start --report-interval 5`）最高优先
+- `config.json`（`~/.saitec-cli/config.json`）是基底，`init` / `config set` / `service add` 写的都是它
+- 环境变量族 `SAITEC_CLI_*`（如 `SAITEC_CLI_REPORT_INTERVAL`）临时盖一层，不落盘
+- 命令行参数（如 `saitec-cli start --report-interval 5`）最高优先
 
-`start` 的临时参数实现上就是转成 `SSGC_*` 环境变量传给后台子进程（`start.py` 里可见）。
+`start` 的临时参数实现上就是转成 `SAITEC_CLI_*` 环境变量传给后台子进程（`start.py` 里可见）。
 
 ### 4.2 进程模型：start / stop 是怎么工作的
 
-`ssgc start` **不是**让当前进程变成服务，而是：
+`saitec-cli start` **不是**让当前进程变成服务，而是：
 1. 用 `subprocess.Popen` 拉起一个独立 Python 子进程（`_serve.py`，Windows 下 `CREATE_NO_WINDOW` 无窗口）
-2. 子进程的 PID 写进 `~/.ssgc/ssgc.pid`
+2. 子进程的 PID 写进 `~/.saitec-cli/saitec-cli.pid`
 3. 父进程立刻退出——所以你终端关了服务照样跑
 
-`ssgc stop`：读 PID 文件 → 写一个 `ssgc.stop.flag` 文件 → 子进程主循环轮询到 flag 就优雅收尾（最后 flush + 上报）→ 超时（默认 10s）则强杀。
+`saitec-cli stop`：读 PID 文件 → 写一个 `saitec-cli.stop.flag` 文件 → 子进程主循环轮询到 flag 就优雅收尾（最后 flush + 上报）→ 超时（默认 10s）则强杀。
 Windows 没有 SIGTERM 优雅信号，所以用 flag 文件轮询这个朴素办法——跨平台且可靠。
 
 `status` / `doctor` 都是拿 PID 文件从外部"探望"：查进程在不在（探活）、端口通不通。status 掉线时 exit code 仍是 0——**判断健康要看 `data.running` 字段**，这是踩过的坑。
@@ -129,9 +129,9 @@ Windows 没有 SIGTERM 优雅信号，所以用 flag 文件轮询这个朴素办
 
 **游标**（`report_cursor` 表，单行）记录最后成功上报的 record_id + 时间戳。作用：进程崩溃/重启后，从 JSONL 里把游标之后没报过的记录重新报出去——**落盘先于上报 + 游标 + JSONL 重放 = 数据不丢**。
 
-**错误三分类**（detector 返回什么决定 ssgc 的行为）：
+**错误三分类**（detector 返回什么决定 saitec-cli 的行为）：
 
-| detector 返回 | 分类 | ssgc 行为 |
+| detector 返回 | 分类 | saitec-cli 行为 |
 |---|---|---|
 | 200 | 成功 | 游标推进，结论入库 |
 | 401 / 403 | AUTH | **停止上报循环**（避免无限重试锁死），日志提示重配 api_key |
@@ -142,14 +142,14 @@ Windows 没有 SIGTERM 优雅信号，所以用 flag 文件轮询这个朴素办
 
 ### 4.4 monitor：不是 tail 日志
 
-`ssgc monitor`（前台实时监控）容易误解为"盯着日志文件看"，实际是**进程内事件流**：Runtime/ProxyService 暴露了 `event_sink` 钩子参数（一个回调函数），关键节点（流量进来、上报完成、violation 命中、上报失败）都会调它发结构化事件。monitor 命令就是传入一个"把事件打印成彩色单行"的回调。
+`saitec-cli monitor`（前台实时监控）容易误解为"盯着日志文件看"，实际是**进程内事件流**：Runtime/ProxyService 暴露了 `event_sink` 钩子参数（一个回调函数），关键节点（流量进来、上报完成、violation 命中、上报失败）都会调它发结构化事件。monitor 命令就是传入一个"把事件打印成彩色单行"的回调。
 
 为什么不用别的方案？——拦截响应看不到 violation（结论在 detector 侧异步产生，响应里没有）；tail 日志是非结构化轮询。事件流既实时又结构化。
 这也是为什么 monitor 与 start 互斥：事件回调在进程内存里，monitor 必须**自己**是那个服务进程。
 
 ### 4.5 数据的双轨制：JSONL vs SQLite
 
-| | JSONL（`~/.ssgc/records/records-YYYY-MM-DD.jsonl`） | SQLite（`~/.ssgc/results.db`） |
+| | JSONL（`~/.saitec-cli/records/records-YYYY-MM-DD.jsonl`） | SQLite（`~/.saitec-cli/results.db`） |
 |---|---|---|
 | 存什么 | **原始完整记录**（每条 Record 一行 JSON） | **检测结论 + 元信息** |
 | 角色 | 事实源 / 崩溃恢复依据 / redo 的数据来源 | 查询缓存（report 命令的索引视图） |
@@ -164,8 +164,8 @@ Windows 没有 SIGTERM 优雅信号，所以用 flag 文件轮询这个朴素办
 ## 5. 目录速查
 
 ```
-src/ssgc/
-├── core/       models.py(Record等数据类)  config.py(加载+三级覆盖)  paths.py(~/.ssgc解析)
+src/saitec_cli/
+├── core/       models.py(Record等数据类)  config.py(加载+三级覆盖)  paths.py(~/.saitec-cli解析)
 ├── recorder/   recorder.py               内存队列→JSONL 批量落盘
 ├── reporter/   reporter.py               HTTP 上报 + 错误三分类
 ├── store/      store.py                  SQLite WAL(detection_results+report_cursor)
@@ -206,7 +206,7 @@ docs/           design/(正式规格) integration/detector-api.md(对接契约) 
 
 ## 8. 常见问题速答
 
-**Q：ssgc 会拖慢我的请求吗？**
+**Q：saitec-cli 会拖慢我的请求吗？**
 非流式路径多一次内存拷贝（微秒级）；流式路径 chunk 直接透传不缓冲。瓶颈永远在上游模型本身。
 
 **Q：检测服务器挂了会丢数据吗？**
@@ -219,4 +219,4 @@ Record 只存元数据骨架不存对话内容。检测服务器只能看到"有
 clean/suspicious/violation/error。error 表示"检测本身失败"（detector 侧问题），不是流量有问题。
 
 **Q：改了配置为什么不生效？**
-配置在 start 时读一次，后台子进程不会感知变化——`ssgc restart`。
+配置在 start 时读一次，后台子进程不会感知变化——`saitec-cli restart`。

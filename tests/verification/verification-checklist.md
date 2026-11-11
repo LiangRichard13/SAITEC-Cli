@@ -1,4 +1,4 @@
-# SSGC 双重验证清单
+# SAITEC-Cli 双重验证清单
 
 > **何时执行**：每次重大改动后（新功能 / P0 修复 / 重命名）跑一轮完整验证。
 > **目标**：深度验证（语义正确性）+ 广度验证（命令全覆盖），弥补 bash 冒烟只查 exit code 和 JSON 结构的盲区。
@@ -35,7 +35,7 @@ TEST_BASE_URL=http://127.0.0.1:9003/v1 python tests/test_chat/probe_openai_respo
 
 ```python
 import json
-records = [json.loads(l) for l in open(f"~/.ssgc/records/records-{today}.jsonl")]
+records = [json.loads(l) for l in open(f"~/.saitec-cli/records/records-{today}.jsonl")]
 ```
 
 **逐条检查项**：
@@ -51,20 +51,20 @@ records = [json.loads(l) for l in open(f"~/.ssgc/records/records-{today}.jsonl")
 ### D3. report 输出验证
 
 ```bash
-ssgc report --since 30m --json --limit 50
+saitec-cli report --since 30m --json --limit 50
 ```
 
 **检查项**：
 - [ ] `data.count` 与 JSONL 记录数一致（或合理子集）
 - [ ] 每条 result 包含新字段：`upstream`、`endpoint_type`、`finish_reason`
 - [ ] `detail.reason` 内容与该条记录的实际请求相关（检测器没判错）
-- [ ] 人类模式 `ssgc report --since 30m` 表格渲染正常、无乱码
+- [ ] 人类模式 `saitec-cli report --since 30m` 表格渲染正常、无乱码
 
 ### D4. export 报告验证
 
 ```bash
-ssgc export -f md -o /tmp/verify-report.md
-ssgc export -f html -o /tmp/verify-report.html
+saitec-cli export -f md -o /tmp/verify-report.md
+saitec-cli export -f html -o /tmp/verify-report.html
 ```
 
 **检查项**：
@@ -78,7 +78,7 @@ ssgc export -f html -o /tmp/verify-report.html
 ### D5. 日志健康检查
 
 ```bash
-ssgc logs --tail 100
+saitec-cli logs --tail 100
 ```
 
 **检查项**：
@@ -91,7 +91,7 @@ ssgc logs --tail 100
 
 ```python
 import sqlite3
-conn = sqlite3.connect("~/.ssgc/results.db")
+conn = sqlite3.connect("~/.saitec-cli/results.db")
 # 检查字段非空率
 conn.execute("SELECT COUNT(*) FROM detection_results WHERE upstream IS NULL OR upstream = ''").fetchone()
 conn.execute("SELECT COUNT(*) FROM detection_results WHERE endpoint_type IS NULL").fetchone()
@@ -114,57 +114,57 @@ conn.execute("SELECT COUNT(*) FROM detection_results WHERE finish_reason IS NULL
 
 | # | 命令 | 人类模式 | --json 模式 | 边界/错误路径 |
 |---|------|----------|------------|-------------|
-| 1 | `ssgc validate` | 输出 "config valid" | `{"ok":true}` | 故意改坏 config 后报错 |
-| 2 | `ssgc config list` | 表格输出 | 结构化 dict | — |
-| 3 | `ssgc config get detector.url` | 单行值 | `{"data":"..."}` | 不存在的 key 报错 |
-| 4 | `ssgc config set log_level debug` | 确认写入 | `{"ok":true}` | 无效值报错 |
-| 5 | `ssgc config unset log_level` | 确认删除 | `{"ok":true}` | 不存在的 key 报错 |
-| 6 | `ssgc service list` | 服务映射表 | 结构化数组 | — |
-| 7 | `ssgc service add test-svc --upstream http://localhost:9999 --json` | — | `{"ok":true}` | name 重名报 NAME_EXISTS |
-| 8 | `ssgc service set test-svc --port 9099 --json` | — | `{"ok":true}` | 不存在的 name 报错 |
-| 9 | `ssgc service remove test-svc --json` | — | `{"ok":true}` | 不存在的 name 报错 |
-| 10 | `ssgc init --force ...` | 完整输出 | `{"ok":true}` | 缺 --upstream 报错 |
+| 1 | `saitec-cli validate` | 输出 "config valid" | `{"ok":true}` | 故意改坏 config 后报错 |
+| 2 | `saitec-cli config list` | 表格输出 | 结构化 dict | — |
+| 3 | `saitec-cli config get detector.url` | 单行值 | `{"data":"..."}` | 不存在的 key 报错 |
+| 4 | `saitec-cli config set log_level debug` | 确认写入 | `{"ok":true}` | 无效值报错 |
+| 5 | `saitec-cli config unset log_level` | 确认删除 | `{"ok":true}` | 不存在的 key 报错 |
+| 6 | `saitec-cli service list` | 服务映射表 | 结构化数组 | — |
+| 7 | `saitec-cli service add test-svc --upstream http://localhost:9999 --json` | — | `{"ok":true}` | name 重名报 NAME_EXISTS |
+| 8 | `saitec-cli service set test-svc --port 9099 --json` | — | `{"ok":true}` | 不存在的 name 报错 |
+| 9 | `saitec-cli service remove test-svc --json` | — | `{"ok":true}` | 不存在的 name 报错 |
+| 10 | `saitec-cli init --force ...` | 完整输出 | `{"ok":true}` | 缺 --upstream 报错 |
 
 ### B2. 生命周期命令
 
 | # | 命令 | 人类模式 | --json 模式 | 边界/错误路径 |
 |---|------|----------|------------|-------------|
-| 11 | `ssgc stop` | 确认停止 | `{"data":{"stopped":true}}` | 已停止时 STALE_PID 自愈 |
-| 12 | `ssgc start` | banner + 服务映射 | `{"ok":true,"data":{"pid":N}}` | 已运行时 ALREADY_RUNNING |
-| 13 | `ssgc status` | 运行状态表 | `data.running` 字段 | — |
-| 14 | `ssgc restart` | stop + start | `{"ok":true}` | — |
-| 15 | `ssgc monitor` | 前台实时输出 | 不支持 --json | Ctrl+C 退出 + 会话总结 |
+| 11 | `saitec-cli stop` | 确认停止 | `{"data":{"stopped":true}}` | 已停止时 STALE_PID 自愈 |
+| 12 | `saitec-cli start` | banner + 服务映射 | `{"ok":true,"data":{"pid":N}}` | 已运行时 ALREADY_RUNNING |
+| 13 | `saitec-cli status` | 运行状态表 | `data.running` 字段 | — |
+| 14 | `saitec-cli restart` | stop + start | `{"ok":true}` | — |
+| 15 | `saitec-cli monitor` | 前台实时输出 | 不支持 --json | Ctrl+C 退出 + 会话总结 |
 
 ### B3. 运维命令
 
 | # | 命令 | 人类模式 | --json 模式 | 边界/错误路径 |
 |---|------|----------|------------|-------------|
-| 16 | `ssgc report --since 1h` | 彩色表格 | `data.results[]` | 空窗口无数据 |
-| 17 | `ssgc report --service X --limit 10` | 过滤结果 | 同上 | 不存在的 service 返回空 |
-| 18 | `ssgc export -f md` | 生成文件 + 摘要 | `data.output_path` | 无效 format 报错 |
-| 19 | `ssgc export -f html --status all` | 全量导出 | 同上 | — |
-| 20 | `ssgc redo <record_id>` | 确认重报 | `data.detection_status` | 不存在的 id 报 RECORD_NOT_FOUND |
-| 21 | `ssgc purge --dry-run` | 预览要删的文件 | `data.files` | — |
+| 16 | `saitec-cli report --since 1h` | 彩色表格 | `data.results[]` | 空窗口无数据 |
+| 17 | `saitec-cli report --service X --limit 10` | 过滤结果 | 同上 | 不存在的 service 返回空 |
+| 18 | `saitec-cli export -f md` | 生成文件 + 摘要 | `data.output_path` | 无效 format 报错 |
+| 19 | `saitec-cli export -f html --status all` | 全量导出 | 同上 | — |
+| 20 | `saitec-cli redo <record_id>` | 确认重报 | `data.detection_status` | 不存在的 id 报 RECORD_NOT_FOUND |
+| 21 | `saitec-cli purge --dry-run` | 预览要删的文件 | `data.files` | — |
 
 ### B4. 调试命令
 
 | # | 命令 | 人类模式 | --json 模式 | 边界/错误路径 |
 |---|------|----------|------------|-------------|
-| 22 | `ssgc doctor` | 六项自检表 | 各项 status | — |
-| 23 | `ssgc doctor --quick` | 跳过 API 探测 | 同上 | — |
-| 24 | `ssgc logs --tail 20` | 最近 20 行日志 | 同文本 | — |
-| 25 | `ssgc logs --follow` | 实时 tail | — | Ctrl+C 退出 |
-| 26 | `ssgc tail` | 实时 JSONL 流 | — | Ctrl+C 退出 |
+| 22 | `saitec-cli doctor` | 六项自检表 | 各项 status | — |
+| 23 | `saitec-cli doctor --quick` | 跳过 API 探测 | 同上 | — |
+| 24 | `saitec-cli logs --tail 20` | 最近 20 行日志 | 同文本 | — |
+| 25 | `saitec-cli logs --follow` | 实时 tail | — | Ctrl+C 退出 |
+| 26 | `saitec-cli tail` | 实时 JSONL 流 | — | Ctrl+C 退出 |
 
 ### B5. --config 隔离验证
 
 ```bash
 # 用临时配置目录验证 --config 参数生效
-export SSGC_CONFIG=/tmp/ssgc-verify-XXXXX/config.json
-ssgc init --api-key test-key-12345678 --detector-url http://127.0.0.1:8001 --upstream http://localhost:23333 --json
-ssgc validate --json    # 应 ok:true
-ssgc start --json       # 应成功启动
-ssgc stop --json        # 应成功停止
+export SAITEC_CLI_CONFIG=/tmp/saitec-cli-verify-XXXXX/config.json
+saitec-cli init --api-key test-key-12345678 --detector-url http://127.0.0.1:8001 --upstream http://localhost:23333 --json
+saitec-cli validate --json    # 应 ok:true
+saitec-cli start --json       # 应成功启动
+saitec-cli stop --json        # 应成功停止
 # 清理临时目录
 ```
 
@@ -190,5 +190,5 @@ ssgc stop --json        # 应成功停止
 |------|------|------|
 | openai-responses 探针 | 全部失败 | 无支持 Responses API 的上游（待补测） |
 | probe 个别条目 | 空 response / Connection error | 上游偶发超时，不视为 bug |
-| `ssgc monitor` 的 `--json` | 不支持 | 设计如此（人盯场景不需要 JSON） |
+| `saitec-cli monitor` 的 `--json` | 不支持 | 设计如此（人盯场景不需要 JSON） |
 | 日志偶发 `report failed (kind=SERVER)` | 退避重试后恢复 | detector 偶发不可用，正常退避 |

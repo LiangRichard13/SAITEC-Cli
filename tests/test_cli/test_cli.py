@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from ssgc.cli.main import app
+from saitec_cli.cli.main import app
 
 runner = CliRunner()
 
 
 @pytest.fixture
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """把 SSGC_CONFIG 指到临时目录，保证 init/validate 用临时 config"""
+    """把 SAITEC_CLI_CONFIG 指到临时目录，保证 init/validate 用临时 config"""
     cfg_path = tmp_path / "config.json"
-    monkeypatch.setenv("SSGC_CONFIG", str(cfg_path))
-    monkeypatch.delenv("SSGC_API_KEY", raising=False)
-    monkeypatch.delenv("SSGC_DETECTOR_URL", raising=False)
+    monkeypatch.setenv("SAITEC_CLI_CONFIG", str(cfg_path))
+    monkeypatch.delenv("SAITEC_CLI_API_KEY", raising=False)
+    monkeypatch.delenv("SAITEC_CLI_DETECTOR_URL", raising=False)
     return tmp_path
 
 
@@ -257,8 +257,8 @@ def test_report_with_data(ready_config: Path) -> None:
     """有 SQLite 数据时 report 应正常返回"""
     import asyncio
     from datetime import datetime, timezone
-    from ssgc.store.store import Store
-    from ssgc.core.models import DetectionResult
+    from saitec_cli.store.store import Store
+    from saitec_cli.core.models import DetectionResult
 
     db_path = ready_config / "results.db"
     # 用 Store 初始化表结构
@@ -294,8 +294,8 @@ def test_report_since_filter(ready_config: Path) -> None:
     """--since 过滤应生效"""
     import asyncio
     from datetime import datetime, timedelta, timezone
-    from ssgc.store.store import Store
-    from ssgc.core.models import DetectionResult
+    from saitec_cli.store.store import Store
+    from saitec_cli.core.models import DetectionResult
 
     db_path = ready_config / "results.db"
     now = datetime.now(timezone.utc)
@@ -384,7 +384,7 @@ def test_redo_success(ready_config: Path, monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     # mock reporter + store
-    from ssgc.cli.commands.redo import _run
+    from saitec_cli.cli.commands.redo import _run
     from unittest.mock import patch
 
     mock_result = {
@@ -394,7 +394,7 @@ def test_redo_success(ready_config: Path, monkeypatch: pytest.MonkeyPatch) -> No
         "risk_level": "low",
     }
 
-    with patch("ssgc.cli.commands.redo._run", return_value=mock_result):
+    with patch("saitec_cli.cli.commands.redo._run", return_value=mock_result):
         result = runner.invoke(app, ["redo", "r123", "--json"])
 
     assert result.exit_code == 0
@@ -436,7 +436,7 @@ def test_redo_prefix_match_single(ready_config: Path, monkeypatch: pytest.Monkey
         "risk_level": "low",
     }
     # 前 8 位应匹配到这条
-    with patch("ssgc.cli.commands.redo._run", return_value=mock_result):
+    with patch("saitec_cli.cli.commands.redo._run", return_value=mock_result):
         result = runner.invoke(app, ["redo", "69f1285a", "--json"])
 
     assert result.exit_code == 0
@@ -534,7 +534,7 @@ def test_purge_dry_run_preserves_files(ready_config: Path) -> None:
 
 def test_start_already_running(ready_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """已有运行实例时 start 应拒绝"""
-    from ssgc.cli._common import write_pid, pid_file_path
+    from saitec_cli.cli._common import write_pid, pid_file_path
 
     write_pid(ready_config / "config.json", os.getpid())  # 伪造当前进程为运行中
 
@@ -584,7 +584,7 @@ def test_stop_not_running(ready_config: Path) -> None:
 
 def test_stop_stale_pid(ready_config: Path) -> None:
     """PID 文件存在但进程已死应清理"""
-    from ssgc.cli._common import write_pid
+    from saitec_cli.cli._common import write_pid
 
     write_pid(ready_config / "config.json", 999999)  # 不存在的 PID
 
@@ -631,7 +631,7 @@ def test_logs_tail(ready_config: Path) -> None:
     """logs --tail 应返回最后 N 行"""
     log_dir = ready_config / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "ssgc.log"
+    log_file = log_dir / "saitec-cli.log"
     log_file.write_text("\n".join([f"line {i}" for i in range(200)]))
 
     result = runner.invoke(app, ["logs", "--tail", "10", "--json"])
@@ -646,7 +646,7 @@ def test_logs_service_filter(ready_config: Path) -> None:
     """logs --service 应过滤"""
     log_dir = ready_config / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "ssgc.log"
+    log_file = log_dir / "saitec-cli.log"
     log_file.write_text("svc-a: hello\nsvc-b: world\nsvc-a: bye\n")
 
     result = runner.invoke(app, ["logs", "--service", "svc-a", "--json"])
@@ -671,7 +671,7 @@ def test_tail_no_records(ready_config: Path) -> None:
 
 def test_monitor_already_running(ready_config: Path) -> None:
     """已有运行实例时 monitor 应拒绝（前台独占）"""
-    from ssgc.cli._common import write_pid
+    from saitec_cli.cli._common import write_pid
 
     write_pid(ready_config / "config.json", os.getpid())  # 伪造当前进程为运行中
     result = runner.invoke(app, ["monitor"])
@@ -699,9 +699,9 @@ def test_purge_removes_old_log_backups(ready_config: Path) -> None:
 
     old_date = (date.today() - timedelta(days=35)).isoformat()
     new_date = date.today().isoformat()
-    old_backup = logs_dir / f"ssgc.log.{old_date}"
-    new_backup = logs_dir / f"ssgc.log.{new_date}"
-    active = logs_dir / "ssgc.log"
+    old_backup = logs_dir / f"saitec-cli.log.{old_date}"
+    new_backup = logs_dir / f"saitec-cli.log.{new_date}"
+    active = logs_dir / "saitec-cli.log"
     old_backup.write_text("old\n")
     new_backup.write_text("new\n")
     active.write_text("active\n")
@@ -721,7 +721,7 @@ def test_purge_dry_run_keeps_logs(ready_config: Path) -> None:
     logs_dir = ready_config / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     old_date = (date.today() - timedelta(days=35)).isoformat()
-    old_backup = logs_dir / f"ssgc.log.{old_date}"
+    old_backup = logs_dir / f"saitec-cli.log.{old_date}"
     old_backup.write_text("old\n")
 
     result = runner.invoke(app, ["purge", "--retention-days", "30", "--dry-run", "--json"])
@@ -735,7 +735,7 @@ def test_serve_logging_uses_daily_rotation(tmp_path: Path) -> None:
     """_setup_logging 应配置按日切割的 handler"""
     import logging
     from logging.handlers import TimedRotatingFileHandler
-    from ssgc.cli._serve import _setup_logging, LOG_BACKUP_COUNT
+    from saitec_cli.cli._serve import _setup_logging, LOG_BACKUP_COUNT
 
     root = logging.getLogger()
     saved_handlers = root.handlers[:]

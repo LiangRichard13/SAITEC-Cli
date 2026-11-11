@@ -2,11 +2,11 @@
 
 - **日期**：2026-08-14
 - **状态**：待评审（Draft）
-- **配套文档**：`saitec-safe-guard-cli-design.md`（总体设计）、`architecture.md`（架构分层）
+- **配套文档**：`saitec-cli-design.md`（总体设计）、`architecture.md`（架构分层）
 
 ## 1. 文档目的
 
-定义 saitec-safe-guard-cli 的**两层持久化**（SQLite 检测结果库 + JSONL 原始记录落盘）的字段、表结构、索引、协作关系与演进策略。**不写实现，只定义形态。**
+定义 saitec-cli 的**两层持久化**（SQLite 检测结果库 + JSONL 原始记录落盘）的字段、表结构、索引、协作关系与演进策略。**不写实现，只定义形态。**
 
 ## 2. 持久化分层
 

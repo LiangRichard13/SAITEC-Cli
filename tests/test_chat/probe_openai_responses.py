@@ -1,4 +1,4 @@
-"""手动联调脚本：经 ssgc 代理验证 openai-responses 协议全链路
+"""手动联调脚本：经 saitec-cli 代理验证 openai-responses 协议全链路
 
 【待补测】当前没有支持 Responses API 的真实上游——脚本已写好，等拿到
 可用 key（OpenAI 官方 / 支持 /v1/responses 的网关）填入 .env 后运行。
@@ -8,7 +8,7 @@
 
 运行：
 
-    cd saitec-safe-guard-cli
+    cd saitec-cli
     python tests/test_chat/probe_openai_responses.py [N]
 
 配置（优先级：环境变量 > test_chat/.env > 默认值，三协议探针共享同一组变量）：
@@ -18,11 +18,11 @@
     TEST_APIKEY        模型厂商的真实 API key（必填）
     TEST_MODEL_NAME    模型名（必填，须是该上游 Responses API 支持的模型）
 
-准备对应 ssgc 服务（upstream 指向真实支持 Responses API 的端点）：
+准备对应 saitec-cli 服务（upstream 指向真实支持 Responses API 的端点）：
 
-    ssgc service add openai-responses --endpoint-type openai-responses \
+    saitec-cli service add openai-responses --endpoint-type openai-responses \
         --upstream <上游> --port 9003 --json
-    ssgc restart --json
+    saitec-cli restart --json
 """
 from __future__ import annotations
 

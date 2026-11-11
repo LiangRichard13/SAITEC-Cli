@@ -1,8 +1,8 @@
-"""手动联调脚本：通过 ssgc 代理发消息，验证监控与上报链路
+"""手动联调脚本：通过 saitec-cli 代理发消息，验证监控与上报链路
 
 不是 pytest 测试（命名避开 test_ 前缀，pytest 不会收集），手动运行：
 
-    cd saitec-safe-guard-cli
+    cd saitec-cli
     python tests/test_chat/chat_probe.py       # 发 12 条（题库见 test_questions.json）
     python tests/test_chat/chat_probe.py 30    # 发 30 条（循环填充）
 
@@ -106,8 +106,8 @@ def main() -> int:
             print(f"[{i:2d}/{n}] ✗ {time.time()-t0:5.1f}s | {p[:18]}... → 错误: {str(e)[:80]}")
 
     print("=" * 70)
-    print(f"完成: 成功 {ok} / 失败 {err}（失败请求同样会被 ssgc 记录并上报）")
-    print("下一步: 等上报周期（默认 60s）后查 mock http://127.0.0.1:8000/records 或 ssgc report")
+    print(f"完成: 成功 {ok} / 失败 {err}（失败请求同样会被 saitec-cli 记录并上报）")
+    print("下一步: 等上报周期（默认 60s）后查 mock http://127.0.0.1:8000/records 或 saitec-cli report")
     return 0
 
 

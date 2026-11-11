@@ -1,27 +1,27 @@
 # AGENTS.md — 项目记忆（开发约定）
 
-> **分工**：开发约定看本文档；项目进度看 [PROGRESS.md](PROGRESS.md)（按需读取）；CLI 使用方法看 `skills/ssgc/SKILL.md` 与 `docs/user-guide.md`；检测服务器对接看 `docs/integration/detector-api.md`。本文档不重复它们的内容。
+> **分工**：开发约定看本文档；项目进度看 [PROGRESS.md](PROGRESS.md)（按需读取）；CLI 使用方法看 `skills/saitec-cli/SKILL.md` 与 `docs/user-guide.md`；检测服务器对接看 `docs/integration/detector-api.md`。本文档不重复它们的内容。
 >
-> **Claude Code 桥接**：本项目约定统一写在 AGENTS.md（跨工具标准），skill 内容在 `skills/ssgc/`（入库）。Claude Code 不自动读它们——本地自建（`.claude/` 已 gitignore 不入库）：
+> **Claude Code 桥接**：本项目约定统一写在 AGENTS.md（跨工具标准），skill 内容在 `skills/saitec-cli/`（入库）。Claude Code 不自动读它们——本地自建（`.claude/` 已 gitignore 不入库）：
 > 1. `CLAUDE.md` 写一行 `@AGENTS.md`（import 语法）
 > 2. skill 链接（Windows，**目标必须是绝对路径**——mklink 相对路径按当前目录解析会指错）：
->    `cmd /c mklink /J "<repo>\.claude\skills\ssgc" "<repo>\skills\ssgc"`
->    Unix：`ln -s ../../skills/ssgc .claude/skills/ssgc`
+>    `cmd /c mklink /J "<repo>\.claude\skills\saitec-cli" "<repo>\skills\saitec-cli"`
+>    Unix：`ln -s ../../skills/saitec-cli .claude/skills/saitec-cli`
 
 ## 1. 项目背景
 
-`ssgc` 是反向代理 CLI：把大模型 API 请求（OpenAI Chat Completions / OpenAI Responses / Anthropic Messages 及任意兼容端点）指到本地端口，透明转发到真实上游，同时记录请求/响应（JSONL）、周期上报到内部安全检测服务器、检测结果落本地 SQLite。
+`saitec-cli` 是反向代理 CLI：把大模型 API 请求（OpenAI Chat Completions / OpenAI Responses / Anthropic Messages 及任意兼容端点）指到本地端口，透明转发到真实上游，同时记录请求/响应（JSONL）、周期上报到内部安全检测服务器、检测结果落本地 SQLite。
 
-- 技术栈：Python ≥3.10 / aiohttp / typer / rich / SQLite(WAL) / pytest；包名 `saitec-safe-guard-cli`，CLI 命令 `ssgc`
+- 技术栈：Python ≥3.10 / aiohttp / typer / rich / SQLite(WAL) / pytest；PyPI 包名 `saitec-cli`，Python 包 `saitec_cli`，CLI 命令 `saitec-cli`
 - 单机自用、本地 http 明文（无 MITM）、检测是事后审计（不阻断流量）
 - 当前状态与功能演进见 PROGRESS.md
 
 ## 2. 目录结构
 
 ```
-src/ssgc/                  # 六层架构，依赖只能向下（见 §3）
+src/saitec_cli/                  # 六层架构，依赖只能向下（见 §3）
 ├── core/                    # L1 最底层：models(数据模型) config(加载/校验/三级覆盖)
-│                            #    paths(路径解析 ~/.ssgc) utils(纯函数)
+│                            #    paths(路径解析 ~/.saitec-cli) utils(纯函数)
 ├── recorder/                # L2：recorder.py（内存队列 + JSONL 按天落盘，崩溃恢复源）
 ├── reporter/                # L2：reporter.py（HTTP 批量上报，X-API-Key，错误三分类 AUTH/PAYLOAD/SERVER）
 ├── store/                   # L2：store.py（SQLite WAL：detection_results + report_cursor 游标）
@@ -48,8 +48,8 @@ docs/
 ├── integration/detector-api.md  # 检测服务器对接契约（含去重实现建议）
 └── issues/cli-usage-issues.md   # 历史问题清单
 
-skills/ssgc/                 # 教 Agent 操作本 CLI 的 skill（SKILL.md + references + evals；
-                             #    Claude Code 用户本地 junction 到 .claude/skills/ssgc，见头部说明）
+skills/saitec-cli/                 # 教 Agent 操作本 CLI 的 skill（SKILL.md + references + evals；
+                             #    Claude Code 用户本地 junction 到 .claude/skills/saitec-cli，见头部说明）
 ```
 
 ## 3. 分层原则（维护扩展的铁律）
@@ -89,7 +89,7 @@ skills/ssgc/                 # 教 Agent 操作本 CLI 的 skill（SKILL.md + re
 
 > **原则**：已修复的 bug 用户不会再遇到，不写排错条目教用户排一个不存在的错。bug 修复记录进 `docs/issues/cli-usage-issues.md` 与 PROGRESS.md 即可；user-guide / SKILL 只在**CLI 操作行为变化**（命令语义、参数、输出、需用户动手的差异）时更新。
 >
-> **CLI help 文本自包含**：`ssgc --help` / `ssgc <cmd> --help` 是写给"已安装用户"看的，pip 用户拿不到项目内 `docs/` 文件——help 文本**不得引用** `docs/` 路径（包括 `docs/user-guide.md §X`、`docs/integration/detector-api.md` 等）。模块 docstring（源码内注释，不渲染给终端用户）不受此限。
+> **CLI help 文本自包含**：`saitec-cli --help` / `saitec-cli <cmd> --help` 是写给"已安装用户"看的，pip 用户拿不到项目内 `docs/` 文件——help 文本**不得引用** `docs/` 路径（包括 `docs/user-guide.md §X`、`docs/integration/detector-api.md` 等）。模块 docstring（源码内注释，不渲染给终端用户）不受此限。
 
 ## 5. PROGRESS.md 约定
 
@@ -124,16 +124,16 @@ skills/ssgc/                 # 教 Agent 操作本 CLI 的 skill（SKILL.md + re
 CLI 全命令支持 `--json`（stdout 结构化、stderr 错误、退出码 0/1/2/3/4），用 bash 断言：
 
 ```bash
-SG="C:/Users/Administrator/anaconda3/envs/saitec-guard/Scripts/ssgc.exe"
-export SSGC_CONFIG=/tmp/<隔离目录>/config.json        # 永远用隔离配置，勿动默认配置
+SG="C:/Users/Administrator/anaconda3/envs/saitec-guard/Scripts/saitec-cli.exe"
+export SAITEC_CLI_CONFIG=/tmp/<隔离目录>/config.json        # 永远用隔离配置，勿动默认配置
 "$SG" init --api-key mock-test-key --detector-url http://127.0.0.1:8001 --upstream http://localhost:23333 --json | python -c "import sys,json; assert json.load(sys.stdin)['ok']"
 "$SG" status --json | python -c "import sys,json; d=json.load(sys.stdin); assert d['data']['running']"   # 注意：running 判断看字段，exit 0 不代表在跑
 ```
 
 ### 日志与 debug
-- 文件：`{config_dir}/logs/ssgc.log`（按天切割，保 14 天）；CLI：`ssgc logs --tail 50`
+- 文件：`{config_dir}/logs/saitec-cli.log`（按天切割，保 14 天）；CLI：`saitec-cli logs --tail 50`
 - 关键 grep：`X-API-Key 失效`（detector 401 → 上报停摆）/ `report failed (kind=)`（上报退避重试）/ `Errno 10048`（端口被占）/ `runtime started|stopped`（生命周期）
-- doctor 自检：`ssgc doctor --json`（config/端口/磁盘/SQLite/JSONL 六项）
+- doctor 自检：`saitec-cli doctor --json`（config/端口/磁盘/SQLite/JSONL 六项）
 
 ### 端到端调试设施
 - `tests/mock_detector/`：随机模式（无需配置）或 llm 模式（真实 LLM 判定 + 前缀去重，`.env` 配 key 不提交）

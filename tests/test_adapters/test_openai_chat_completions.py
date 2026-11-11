@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from ssgc.adapters.openai_chat_completions import OpenAIChatCompletionsAdapter
+from saitec_cli.adapters.openai_chat_completions import OpenAIChatCompletionsAdapter
 
 
 # ============================================================

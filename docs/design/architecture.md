@@ -1,12 +1,12 @@
-# Saitec Safe CLI — 架构设计
+# SAITEC-Cli — 架构设计
 
 - **日期**：2026-08-14
 - **状态**：待评审（Draft）
-- **配套文档**：`saitec-safe-guard-cli-design.md`（总体设计），本文档专注**架构分层与代码组织**
+- **配套文档**：`saitec-cli-design.md`（总体设计），本文档专注**架构分层与代码组织**
 
 ## 1. 文档目的
 
-把 `saitec-safe-guard-cli-design.md` 描述的工具，按"高内聚、低耦合、依赖单向、底层独立可运行"的原则，拆成清晰的代码层，并定义每层的职责边界、依赖方向、对外接口、目录结构。**本文档不写实现，只定义形态。**
+把 `saitec-cli-design.md` 描述的工具，按"高内聚、低耦合、依赖单向、底层独立可运行"的原则，拆成清晰的代码层，并定义每层的职责边界、依赖方向、对外接口、目录结构。**本文档不写实现，只定义形态。**
 
 ## 2. 设计原则
 
@@ -406,14 +406,14 @@ CLI 不是只给人看的，**必须支持 Agent 解析**。所有命令遵循�
 
 ```bash
 # 人类可读
-ssgc status
+saitec-cli status
 #   SERVICE                  PORT  UPSTREAM               STATUS   QUEUE_DEPTH
 #   openai-chat-completions  9001  https://api.openai.com running 12
 #   openai-responses         9002  https://api.openai.com running 0
 #   anthropic-messages       9003  https://api.anthropic  running 5
 
 # 机器可读
-ssgc status --json
+saitec-cli status --json
 # {
 #   "services": [
 #     {"name": "openai-chat-completions", "port": 9001, "upstream": "https://api.openai.com", "status": "running", "queue_depth": 12},
@@ -458,7 +458,7 @@ Agent 用 `$?` 即可判定下一步动作。
 `init` 默认交互式（人类方便），但支持全非交互参数：
 
 ```bash
-ssgc init --api-key "$API_KEY" --detector-url "http://detector:8080" --config ./config.json
+saitec-cli init --api-key "$API_KEY" --detector-url "http://detector:8080" --config ./config.json
 ```
 
 **异步命令（`start`）**
@@ -593,15 +593,15 @@ async def _replay_unreported(self):
 ## 8. 包结构（目录）
 
 ```
-saitec-safe-guard-cli/
+SAITEC-Cli/
 ├── pyproject.toml
 ├── README.md
 ├── docs/
 │   └── design/
-│       ├── saitec-safe-guard-cli-design.md
+│       ├── saitec-cli-design.md
 │       └── architecture.md            ← 本文档
 ├── src/
-│   └── ssgc/
+│   └── saitec_cli/
 │       ├── __init__.py
 │       ├── core/                       # layer 0
 │       │   ├── __init__.py

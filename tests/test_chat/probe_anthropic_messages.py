@@ -1,4 +1,4 @@
-"""手动联调脚本：经 ssgc 代理验证 anthropic-messages 协议全链路
+"""手动联调脚本：经 saitec-cli 代理验证 anthropic-messages 协议全链路
 
 不是 pytest 测试（命名避开 test_ 前缀，pytest 不会收集）。用官方 anthropic SDK
 走真实客户端行为（自带 x-api-key / anthropic-version 头 + SSE 流式），与真实
@@ -6,7 +6,7 @@ Claude Code 的调用形态一致——历史 gzip 透传 bug 正是这类真实
 
 运行：
 
-    cd saitec-safe-guard-cli
+    cd saitec-cli
     python tests/test_chat/probe_anthropic_messages.py [N]
 
 配置（优先级：环境变量 > test_chat/.env > 默认值，三协议探针共享同一组变量）：
@@ -108,7 +108,7 @@ def main() -> int:
 
     print("=" * 70)
     print(f"完成: 成功 {ok} / 失败 {err}")
-    print("下一步: 等 上报周期后查 mock http://127.0.0.1:8000/records 或 ssgc report --json")
+    print("下一步: 等 上报周期后查 mock http://127.0.0.1:8000/records 或 saitec-cli report --json")
     print("排查: 客户端解码类报错先看 JSONL 该条 response.content 是否完整（代理侧证据）")
     return 0
 

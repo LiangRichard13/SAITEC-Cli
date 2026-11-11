@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "saitec-safe-guard-cli"
+name = "saitec-cli"
 version = "0.1.0"
 description = "Reverse-proxy CLI for LLM API traffic monitoring and security detection"
 readme = "README.md"
@@ -31,9 +31,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/LiangRichard13/saitec-safe-guard-cli"
-Repository = "https://github.com/LiangRichard13/saitec-safe-guard-cli"
-Issues = "https://github.com/LiangRichard13/saitec-safe-guard-cli/issues"
+Homepage = "https://github.com/LiangRichard13/saitec-cli"
+Repository = "https://github.com/LiangRichard13/saitec-cli"
+Issues = "https://github.com/LiangRichard13/saitec-cli/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -54,13 +54,13 @@ probe = [
 ]
 
 [project.scripts]
-ssgc = "ssgc.cli.main:app"
+saitec-cli = "saitec_cli.cli.main:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-ssgc = ["py.typed"]
+saitec_cli = ["py.typed"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
