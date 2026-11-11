@@ -2,6 +2,14 @@
 
 > 倒序时间线。格式约定见 [AGENTS.md](AGENTS.md) §5。接手 Agent 先读本文件建立上下文。
 > 条目与 commit 一一对应；`教训:` 行是防重踩的关键。
+>
+> **命名变更**：2026-11-11 起项目更名 SAITEC-Cli；下方历史条目中的 `ssgc` / `saitec-safe-guard-cli` 是当时的真实记录，保留原貌。
+
+## 2026-11-11
+
+### refactor: 项目全面改名 SAITEC-Cli <ec619a9>
+PyPI/GitHub `saitec-cli`、CLI 命令 `saitec-cli`、Python 包 `saitec_cli`、环境变量 `SAITEC_CLI_*`、数据目录 `~/.saitec-cli`、日志/PID/stop flag `saitec-cli.*`、skill 目录 `skills/saitec-cli` 全部同步；README/文档/CLI banner/help/导出报告改新名，旧名不留兼容。全量 pytest 253 passed / 1 skipped，CLI help/init/status/banner 冒烟通过，grep 旧名 0 残留（本文件历史条目保留原貌）。
+教训: Windows 下 ZCode 自身及 node 服务的 cwd 持有项目根目录时，顶层文件夹 rename 必报 Device or resource busy——需关闭会话后从外部改名；替换审计要同时查旧名、旧名超集和替换产物（如 `saitec-cli-cli`）。
 
 ## 2026-09-10
 
