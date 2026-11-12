@@ -347,3 +347,31 @@ def test_reporter_timeout_from_config() -> None:
     cfg = DetectorConfig(url="http://x", api_key="k", timeout_sec=120)
     assert Reporter(cfg, None)._timeout_sec == 120.0
     assert Reporter(cfg, None, timeout_sec=5.0)._timeout_sec == 5.0
+
+
+def test_parse_response_risk_level_out_of_domain_normalized() -> None:
+    """域外 risk_level 必须置 None——透传会让 store CHECK 失败（整批死锁）"""
+    batch = [_make_record(1), _make_record(2)]
+    results = Reporter._parse_response(
+        batch,
+        {"results": [
+            {"record_id": "rec-0001", "detection_status": "violation",
+             "risk_level": "catastrophic", "detected_at": "2026-08-14T12:00:01Z"},
+            {"record_id": "rec-0002", "detection_status": "violation",
+             "risk_level": " HIGH ", "detected_at": "2026-08-14T12:00:01Z"},
+        ]},
+    )
+    assert results[0].risk_level is None
+    assert results[1].risk_level == "high"
+
+
+def test_parse_response_success_false_logged_and_empty(caplog) -> None:
+    """HTTP 200 但 success=false：按空结论处理并留痕（不静默丢结论）"""
+    import logging
+    batch = [_make_record(1)]
+    with caplog.at_level(logging.WARNING, logger="saitec_cli.reporter.reporter"):
+        results = Reporter._parse_response(
+            batch, {"success": False, "message": "boom", "data": None}
+        )
+    assert results == []
+    assert any("success=false" in r.message for r in caplog.records)

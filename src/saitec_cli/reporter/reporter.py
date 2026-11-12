@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -18,6 +19,19 @@ from typing import Any
 import aiohttp
 
 from ..core.models import DetectionResult, DetectorConfig, Record
+
+logger = logging.getLogger(__name__)
+
+# 与 store 的 CHECK 约束对齐：域外 risk_level 会让整批入库失败并触发
+# 无限重试死锁，解析时白名单兜底（服务端也应规范化，此处是最后防线）
+_VALID_RISK_LEVELS = frozenset({"low", "medium", "high", "critical"})
+
+
+def _normalize_risk(value: Any) -> str | None:
+    """risk_level 白名单规范化：域外值 / 非字符串一律置 None"""
+    if isinstance(value, str) and value.strip().lower() in _VALID_RISK_LEVELS:
+        return value.strip().lower()
+    return None
 
 
 class ReportErrorKind(str, Enum):
@@ -120,6 +134,10 @@ class Reporter:
         兼容两种封装：优先取顶层 `results`（mock/旧版格式），缺失时解包
         BaseResponse 的 `data.results`（Core 服务端格式）。
         """
+        if data.get("success") is False:
+            logger.warning(
+                "detector returned success=false with HTTP 200; treating as no results"
+            )
         items = data.get("results")
         if items is None:
             inner = data.get("data")
@@ -153,7 +171,7 @@ class Reporter:
                     finish_reason=r.response.get("finish_reason"),
                     error=r.error,
                     detection_status=item.get("detection_status", "clean"),
-                    risk_level=item.get("risk_level"),
+                    risk_level=_normalize_risk(item.get("risk_level")),
                     detection_detail=item.get("detection_detail"),
                     detected_at=detected_at,
                 )

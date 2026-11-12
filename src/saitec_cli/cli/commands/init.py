@@ -123,7 +123,8 @@ def init_cmd(
     生成单服务配置；要监控更多端点用 `saitec-cli service add`。
 
     校验：api_key ≥ 8 字符；detector-url 与 upstream 必须以 http/https 开头；
-    非 TTY 且未给 `--upstream` 时报错（upstream 必须显式指定）。
+    endpoint-path 必须以 / 开头；非 TTY 且未给 `--upstream` 时报错
+    （upstream 必须显式指定）。
 
     \b
     Examples:
@@ -249,6 +250,7 @@ def init_cmd(
         )
         return
 
+    endpoint_path = endpoint_path.strip()
     if not endpoint_path.startswith("/"):
         emit(
             json_output=json_output,

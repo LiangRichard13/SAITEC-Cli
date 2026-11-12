@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import typer
+from rich.markup import escape
 
 from .._common import SHIELD, WARN, console, emit, get_config_path, EXIT_USER_ERROR
 from ...store.store import Store
@@ -166,5 +167,7 @@ def report(
         console.print()
         console.print(f"{WARN} 风险摘要:")
         for rid, status, reason in flagged:
-            console.print(f"  [bold]{rid}[/bold] [{ 'red' if status == 'violation' else 'yellow' }]{status}[/] — {reason}")
+            # reason 来自检测服务器（LLM 输出，外部不可信数据），escape 防
+            # rich markup 注入（[..] 会被解析成样式/链接做伪输出）
+            console.print(f"  [bold]{rid}[/bold] [{ 'red' if status == 'violation' else 'yellow' }]{status}[/] — {escape(str(reason))}")
     console.print(f"[dim]完整字段（时间 / detected_at / detail）用 --json 查看；重报: saitec-cli redo <record_id>[/dim]")

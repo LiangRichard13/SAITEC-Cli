@@ -232,8 +232,11 @@ class Runtime:
         - 非 ReportError 的意外异常（SQLite locked 等）也兜底记录并退避，**不杀死循环**
         - 游标只推进到**已成功上报**的批次末尾（失败记录不会被游标越过）
         """
-        # 先启动续传（recover 未上报记录）
-        await self._replay_unreported()
+        # 先启动续传（recover 未上报记录）；任何意外异常不允许杀死循环
+        try:
+            await self._replay_unreported()
+        except Exception:
+            logger.exception("replay unreported failed (ignored)")
 
         pending: list[Record] = []
         backoff = 1
@@ -359,6 +362,10 @@ class Runtime:
                                 logger.error("续传时 auth 失败，停止续传: %s", e.message)
                                 return
                             logger.warning("续传单条失败: %s — %s", rec_id, e.message)
+                        except Exception:
+                            # 意外异常（如历史 JSONL 记录形态损坏触发解析错误）
+                            # 跳过该条，不允许杀死上报循环
+                            logger.exception("续传单条意外失败（跳过）: %s", rec_id)
             except OSError:
                 logger.exception("读 JSONL 失败: %s", jsonl_file)
 

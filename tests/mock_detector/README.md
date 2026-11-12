@@ -4,7 +4,7 @@
 
 > **真实对接已迁移**：生产检测接口由 SAITEC-Products Core 平台提供
 > （`POST /api/v1/cli/safe-guard/detect`，LLM 审上下文 + 前缀去重，
-> 见 Core 仓库 `docs/cli_service/safe-guard.md`）。本 mock 保留用于
+> 见 SAITEC-Products 仓库 `docs/cli_service/safe-guard.md`）。本 mock 保留用于
 > 本地开发/联调，其 llm 模式即 Core 实现的逻辑原型。
 
 **两种检测模式**（`MOCK_DETECTION_MODE`）：

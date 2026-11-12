@@ -249,7 +249,8 @@ def _render_markdown(data: dict) -> str:
     L.append("|---|---|---|---|---|---|---|---|---|")
     for i, r in enumerate(data["rows"], 1):
         ts = _to_local(r["timestamp"])
-        reason = _detail_reason(r["detail"]).replace("|", "\\|")
+        # reason 来自检测服务器（外部数据）：折叠换行防破表格/伪造行，转义竖线防列错位
+        reason = _detail_reason(r["detail"]).replace("\r", " ").replace("\n", " ").replace("|", "\\|")
         upstream_short = (r["upstream"] or "").replace("https://", "").replace("http://", "")[:30]
         L.append(
             f"| {i} | {ts} | {r['service']} | {upstream_short} | {r['model'] or '-'} "

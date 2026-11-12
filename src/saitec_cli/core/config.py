@@ -239,8 +239,8 @@ def apply_cli_overrides(config: AppConfig, **kwargs: Any) -> AppConfig:
     """应用 CLI 参数覆盖
 
     支持的字段（参见 `_CLI_FIELD_MAP`）：
-    - `detector_url` / `api_key`
-    - `report_interval` / `batch_size` / `max_queue_size`
+    - `detector_url` / `api_key` / `endpoint_path`
+    - `report_interval` / `batch_size` / `max_queue_size` / `timeout_sec`
     - `log_level`
 
     Args:

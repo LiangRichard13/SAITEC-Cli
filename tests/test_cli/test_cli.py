@@ -777,3 +777,15 @@ def test_init_endpoint_path_must_start_with_slash(isolated: Path) -> None:
     assert result.exit_code == 1
     assert "endpoint_path 必须以 / 开头" in result.stderr
     assert not (isolated / "config.json").exists()
+
+
+def test_init_endpoint_path_strips_whitespace(isolated: Path) -> None:
+    """尾随空白必须剥掉——否则写入配置后拼 URL 404 重试难排查"""
+    result = runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://d:8080",
+         "--upstream", "http://127.0.0.1:9999", "--endpoint-path", "/detect "],
+    )
+    assert result.exit_code == 0
+    cfg = json.loads((isolated / "config.json").read_text())
+    assert cfg["detector"]["endpoint_path"] == "/detect"

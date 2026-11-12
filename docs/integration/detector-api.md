@@ -245,7 +245,7 @@ saitec-cli config set detector.endpoint_path /api/v1/detect-v2
 | 上报周期 | 默认 60s（用户可配，调试时可能 1-5s） | 每周期一次 POST |
 | 批量大小 | 默认 ≤500 条/批 | 用户可配 |
 | 请求体大小 | 典型 1-100 KB，极端可达数 MB（长对话） | Record 含完整对话内容 |
-| 客户端超时 | **默认 30 秒**（`detector.timeout_sec` 可配） | 超时即断开重试；检测逻辑请在此预算内完成（真实 LLM 检测建议用户调大该值，如 120s；异步检测可先返回 `error`/`suspicious` 结论，后台完成后靠 redo） |
+| 客户端超时 | **默认 30 秒**（`detector.timeout_sec` 可配） | 超时即断开重试；检测逻辑请在此预算内完成（真实 LLM 检测建议用户调大该值；经验公式 `timeout_sec ≥ ceil(batch_size/服务端并发) × 单条LLM耗时p99 × 1.5`，Core 服务端单批另有 25s deadline，到点未完成条目降级 error 返回；异步检测可先返回 `error`/`suspicious` 结论，后台完成后靠 redo） |
 | 并发 | 单用户单进程串行上报 | 无并发竞争 |
 | User-Agent | aiohttp 默认 | — |
 
@@ -260,7 +260,7 @@ SAITEC-Products 仓库 Core 平台内置了按本契约实现的真实检测接�
 运维状态 `GET /api/v1/cli/safe-guard/status`。鉴权走 Core 的 AuthMiddleware
 （`X-API-Key` 为 Core 平台 `api_keys` 表签发的密钥，401 时响应体为
 `{"success": false, "message": "..."}`——saitec-cli 只按状态码分类，不解析 401 响应体）。
-部署与配置详见 Core 仓库 `docs/cli_service/safe-guard.md`。
+部署与配置详见 SAITEC-Products 仓库 `docs/cli_service/safe-guard.md`。
 
 用户侧对接：
 
