@@ -79,6 +79,9 @@ class DetectorConfig:
     report_interval_sec: int = 60
     batch_size: int = 500  # P0-8: 100 → 500（10rps 时 100/min 跟不上）
     max_queue_size: int = 10000
+    # 单批上报超时（秒）。真实 LLM 检测远慢于 mock，大批次首报超时会被
+    # 退避重试卡死，可调大（如 120）
+    timeout_sec: int = 30
 
 
 @dataclass

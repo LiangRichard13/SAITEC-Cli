@@ -486,3 +486,52 @@ def test_load_config_with_overrides_priority(
     )
     # cli 覆盖 env
     assert cfg.detector.report_interval_sec == 300
+
+# ============================================================
+# detector.timeout_sec（上报超时可配置）
+# ============================================================
+
+
+def test_load_config_json_timeout_sec_default_and_custom(tmp_path: Path) -> None:
+    """timeout_sec 缺省 30；显式配置生效"""
+    base = {
+        "detector": {"url": "http://d", "api_key": "k"},
+        "services": [],
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(base))
+    assert load_config_json(path).detector.timeout_sec == 30
+
+    path.write_text(json.dumps({**base, "detector": {**base["detector"], "timeout_sec": 120}}))
+    assert load_config_json(path).detector.timeout_sec == 120
+
+
+def test_apply_env_overrides_timeout_sec(
+    valid_config: AppConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SAITEC_CLI_TIMEOUT_SEC", "90")
+    assert apply_env_overrides(valid_config).detector.timeout_sec == 90
+
+
+def test_apply_cli_overrides_timeout_sec(valid_config: AppConfig) -> None:
+    assert apply_cli_overrides(valid_config, timeout_sec=60).detector.timeout_sec == 60
+
+
+def test_validate_config_timeout_sec() -> None:
+    cfg = AppConfig(
+        detector=DetectorConfig(url="http://detector:8080", api_key="sk-test", timeout_sec=0),
+        services=[],
+    )
+    errors = validate_config(cfg)
+    assert any(
+        e.field == "detector.timeout_sec" and e.message == "must be > 0" for e in errors
+    )
+
+
+def test_load_config_with_overrides_timeout_priority(
+    valid_config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """timeout_sec 同样遵循 config < env < cli 优先级"""
+    monkeypatch.setenv("SAITEC_CLI_TIMEOUT_SEC", "60")
+    cfg, _ = load_config_with_overrides(valid_config_path, timeout_sec=120)
+    assert cfg.detector.timeout_sec == 120

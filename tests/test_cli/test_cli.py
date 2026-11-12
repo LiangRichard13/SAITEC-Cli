@@ -750,3 +750,30 @@ def test_serve_logging_uses_daily_rotation(tmp_path: Path) -> None:
         for h in root.handlers:
             h.close()
         root.handlers = saved_handlers
+
+# ============================================================
+# init --endpoint-path（对接 SAITEC Core 等自定义检测路径）
+# ============================================================
+
+
+def test_init_endpoint_path_writes_config(isolated: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://core:8080",
+         "--upstream", "http://127.0.0.1:9999", "--endpoint-path", "/api/v1/cli/safe-guard/detect"],
+    )
+    assert result.exit_code == 0
+    cfg = json.loads((isolated / "config.json").read_text())
+    assert cfg["detector"]["endpoint_path"] == "/api/v1/cli/safe-guard/detect"
+    assert cfg["detector"]["timeout_sec"] == 30  # init 默认写入
+
+
+def test_init_endpoint_path_must_start_with_slash(isolated: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://d:8080",
+         "--upstream", "http://127.0.0.1:9999", "--endpoint-path", "api/detect"],
+    )
+    assert result.exit_code == 1
+    assert "endpoint_path 必须以 / 开头" in result.stderr
+    assert not (isolated / "config.json").exists()

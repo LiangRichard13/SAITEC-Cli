@@ -44,28 +44,24 @@ class Reporter:
         self,
         config: DetectorConfig,
         client: aiohttp.ClientSession,
-        timeout_sec: float = 30.0,
+        timeout_sec: float | None = None,
     ) -> None:
         self._config = config
         self._client = client
-        self._timeout_sec = timeout_sec
+        # 单批上报总超时：默认取 detector.timeout_sec（真实 LLM 检测慢，
+        # 可在配置中调大；显式参数仍可覆盖，保留旧调用方式）
+        self._timeout_sec = float(timeout_sec if timeout_sec is not None else config.timeout_sec)
 
     async def report(self, batch: list[Record]) -> list[DetectionResult]:
         """批量上报，返回检测结果
 
-        检测服务器响应格式（约定）：
+        检测服务器响应格式（约定，两种封装均兼容）：
         ```json
-        {
-            "results": [
-                {
-                    "record_id": "...",
-                    "detection_status": "clean" | "suspicious" | "violation" | "error",
-                    "risk_level": "low" | "medium" | "high" | "critical" | null,
-                    "detection_detail": {...},
-                    "detected_at": "2026-08-14T..."
-                }
-            ]
-        }
+        // BaseResponse 包装（Core 服务端格式）
+        {"success": true, "message": "success",
+         "data": {"results": [{"record_id": "...", "detection_status": "clean", ...}]}}
+        // 裸 results（mock detector 及旧版格式）
+        {"results": [...]}
         ```
 
         Raises:
@@ -119,8 +115,15 @@ class Reporter:
     def _parse_response(
         batch: list[Record], data: dict[str, Any]
     ) -> list[DetectionResult]:
-        """解析检测服务器响应，与 batch 关联成 DetectionResult"""
-        items = data.get("results", [])
+        """解析检测服务器响应，与 batch 关联成 DetectionResult
+
+        兼容两种封装：优先取顶层 `results`（mock/旧版格式），缺失时解包
+        BaseResponse 的 `data.results`（Core 服务端格式）。
+        """
+        items = data.get("results")
+        if items is None:
+            inner = data.get("data")
+            items = inner.get("results") if isinstance(inner, dict) else None
         if not isinstance(items, list):
             return []
         by_id = {r.record_id: r for r in batch}

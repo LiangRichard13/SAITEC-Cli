@@ -299,3 +299,51 @@ async def test_response_unknown_record_id_skipped(custom_response_server: Any) -
         results = await reporter.report([_make_record(1)])
     assert len(results) == 1
     assert results[0].record_id == "rec-0001"
+
+# ============================================================
+# 响应双格式解析 + 超时取配置
+# ============================================================
+
+
+def test_parse_response_bare_results_format() -> None:
+    """裸 results 格式（mock detector / 旧版服务端）"""
+    batch = [_make_record(1)]
+    results = Reporter._parse_response(
+        batch,
+        {"results": [{"record_id": "rec-0001", "detection_status": "violation",
+                      "risk_level": "high", "detection_detail": {"score": 0.9},
+                      "detected_at": "2026-08-14T12:00:01Z"}]},
+    )
+    assert len(results) == 1
+    assert results[0].detection_status == "violation"
+
+
+def test_parse_response_basewrapper_format() -> None:
+    """BaseResponse 包装格式（Core 服务端）：结论解包自 data.results"""
+    batch = [_make_record(1)]
+    results = Reporter._parse_response(
+        batch,
+        {"success": True, "message": "success",
+         "data": {"results": [{"record_id": "rec-0001", "detection_status": "clean",
+                               "risk_level": "low", "detection_detail": {"reason": "pass"},
+                               "detected_at": "2026-08-14T12:00:01Z"}]}},
+    )
+    assert len(results) == 1
+    assert results[0].record_id == "rec-0001"
+    assert results[0].detection_status == "clean"
+
+
+def test_parse_response_wrapper_without_results_returns_empty() -> None:
+    """包装存在但 data.results 缺失/非列表 → 空（维持旧语义）"""
+    batch = [_make_record(1)]
+    assert Reporter._parse_response(batch, {"success": True, "message": "ok", "data": {}}) == []
+    assert Reporter._parse_response(batch, {"data": {"results": "nope"}}) == []
+
+
+def test_reporter_timeout_from_config() -> None:
+    """显式参数 > 配置 timeout_sec > 默认 30（构造器只存引用，client 可为 None）"""
+    cfg = DetectorConfig(url="http://x", api_key="k")
+    assert Reporter(cfg, None)._timeout_sec == 30.0
+    cfg = DetectorConfig(url="http://x", api_key="k", timeout_sec=120)
+    assert Reporter(cfg, None)._timeout_sec == 120.0
+    assert Reporter(cfg, None, timeout_sec=5.0)._timeout_sec == 5.0

@@ -35,16 +35,18 @@ def _build_default_config(
     detector_url: str,
     api_key: str,
     service: dict,
+    endpoint_path: str = "/detect",
 ) -> dict:
     return {
         "config_version": 1,
         "detector": {
             "url": detector_url,
             "api_key": api_key,
-            "endpoint_path": "/detect",
+            "endpoint_path": endpoint_path,
             "report_interval_sec": 60,
             "batch_size": 500,
             "max_queue_size": 10000,
+            "timeout_sec": 30,
         },
         "services": [service],
         "log_level": "INFO",
@@ -106,6 +108,11 @@ def init_cmd(
     port: int = typer.Option(
         9001, "--port", "-p", help="本地监听端口（默认 9001）"
     ),
+    endpoint_path: str = typer.Option(
+        "/detect",
+        "--endpoint-path",
+        help="检测接口路径（与 detector-url 拼接；如 SAITEC Core 为 /api/v1/cli/safe-guard/detect）",
+    ),
     config_path: Path | None = typer.Option(None, "--config", "-c"),
     json_output: bool = typer.Option(False, "--json"),
     force: bool = typer.Option(False, "--force", help="覆盖已存在的 config.json"),
@@ -122,6 +129,7 @@ def init_cmd(
     Examples:
       saitec-cli init --api-key KEY --detector-url http://detector:8080 --upstream https://api.deepseek.com
       saitec-cli init --api-key KEY --detector-url URL --upstream http://localhost:23333 --port 9010
+      saitec-cli init --api-key KEY --detector-url http://core:8080 --upstream URL --endpoint-path /api/v1/cli/safe-guard/detect
       saitec-cli init --api-key KEY --detector-url URL --upstream URL --force  # 覆盖已有
 
     \b
@@ -241,6 +249,18 @@ def init_cmd(
         )
         return
 
+    if not endpoint_path.startswith("/"):
+        emit(
+            json_output=json_output,
+            ok=False,
+            error={
+                "code": "INVALID_ENDPOINT_PATH",
+                "message": f"endpoint_path 必须以 / 开头，got {endpoint_path!r}",
+            },
+            exit_code=EXIT_USER_ERROR,
+        )
+        return
+
     service = {
         "name": name or endpoint_type,
         "port": port,
@@ -248,7 +268,7 @@ def init_cmd(
         "endpoint_type": endpoint_type,
         "record_body": True,
     }
-    config = _build_default_config(detector_url, api_key, service)
+    config = _build_default_config(detector_url, api_key, service, endpoint_path)
 
     try:
         ensure_dirs()
@@ -276,6 +296,7 @@ def init_cmd(
             data={
                 "config_path": str(path),
                 "detector_url": detector_url,
+                "endpoint_path": endpoint_path,
                 "services": [service],
                 "endpoint_type_guessed": guessed,
                 "warnings": warnings,

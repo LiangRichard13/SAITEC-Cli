@@ -32,6 +32,7 @@ _DETECTOR_ENV_MAP: dict[str, tuple[tuple[str, str], type]] = {
     "SAITEC_CLI_REPORT_INTERVAL": (("detector", "report_interval_sec"), int),
     "SAITEC_CLI_BATCH_SIZE": (("detector", "batch_size"), int),
     "SAITEC_CLI_MAX_QUEUE_SIZE": (("detector", "max_queue_size"), int),
+    "SAITEC_CLI_TIMEOUT_SEC": (("detector", "timeout_sec"), int),
 }
 _TOP_LEVEL_ENV_MAP: dict[str, tuple[tuple[str], type]] = {
     "SAITEC_CLI_LOG_LEVEL": (("log_level",), str),
@@ -45,6 +46,7 @@ _CLI_FIELD_MAP: dict[str, tuple[tuple[str, ...], type]] = {
     "report_interval": (("detector", "report_interval_sec"), int),
     "batch_size": (("detector", "batch_size"), int),
     "max_queue_size": (("detector", "max_queue_size"), int),
+    "timeout_sec": (("detector", "timeout_sec"), int),
     "log_level": (("log_level",), str),
 }
 
@@ -168,6 +170,7 @@ def load_config_json(path: Path) -> AppConfig:
         report_interval_sec=detector_raw.get("report_interval_sec", 60),
         batch_size=detector_raw.get("batch_size", 500),
         max_queue_size=detector_raw.get("max_queue_size", 10000),
+        timeout_sec=detector_raw.get("timeout_sec", 30),
     )
     services = [
         EndpointSpec(
@@ -323,6 +326,14 @@ def validate_config(config: AppConfig) -> list[ConfigError]:
             ConfigError(
                 code=ConfigErrorCode.CONFIG_VALIDATION_ERROR,
                 field="detector.max_queue_size",
+                message="must be > 0",
+            )
+        )
+    if config.detector.timeout_sec <= 0:
+        errors.append(
+            ConfigError(
+                code=ConfigErrorCode.CONFIG_VALIDATION_ERROR,
+                field="detector.timeout_sec",
                 message="must be > 0",
             )
         )

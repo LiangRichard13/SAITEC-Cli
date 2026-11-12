@@ -36,6 +36,7 @@ _INT_FIELDS = {
     "detector.report_interval_sec",
     "detector.batch_size",
     "detector.max_queue_size",
+    "detector.timeout_sec",
     "port",
 }
 _BOOL_FIELDS = {"record_body"}
@@ -152,6 +153,7 @@ def _raw_to_model(data: dict) -> AppConfig:
         report_interval_sec=data.get("detector", {}).get("report_interval_sec", 60),
         batch_size=data.get("detector", {}).get("batch_size", 500),
         max_queue_size=data.get("detector", {}).get("max_queue_size", 10000),
+        timeout_sec=data.get("detector", {}).get("timeout_sec", 30),
     )
     services = [
         EndpointSpec(
@@ -426,6 +428,7 @@ def _env_var_for_field(field: str) -> str | None:
         "detector.report_interval_sec": "SAITEC_CLI_REPORT_INTERVAL",
         "detector.batch_size": "SAITEC_CLI_BATCH_SIZE",
         "detector.max_queue_size": "SAITEC_CLI_MAX_QUEUE_SIZE",
+        "detector.timeout_sec": "SAITEC_CLI_TIMEOUT_SEC",
         "log_level": "SAITEC_CLI_LOG_LEVEL",
     }
     if field in mapping:
