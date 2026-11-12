@@ -5,6 +5,16 @@
 >
 > **命名变更**：2026-11-11 起项目更名 SAITEC-Cli；下方历史条目中的 `ssgc` / `saitec-safe-guard-cli` 是当时的真实记录，保留原貌。
 
+## 2026-11-12
+
+### feat: reporter 响应双格式解析 + detector.timeout_sec 可配 + init --endpoint-path <f6c7a21>
+对接 SAITEC-Products Core 新落的真实检测接口（`POST /api/v1/cli/safe-guard/detect`，检测逻辑即 mock llm 模式的移植，BaseResponse 包装 `data.results`）：`_parse_response` 双格式兼容——顶层 `results` 缺失时解包 `data.results`，mock 裸格式与旧服务端不破坏；新配置字段 `detector.timeout_sec`（默认 30，env `SAITEC_CLI_TIMEOUT_SEC`，models/config/config_cmd/init 四处同步），reporter 上报超时改读配置；init 增 `--endpoint-path`（校验以 / 开头，json 输出增 endpoint_path 字段）。全量 265 绿（+11）。
+教训: 服务端换响应封装时，客户端按"顶层优先、缺则解包"做双格式兼容，可同时服务新旧两端，契约文档只需标注推荐格式；新增 CLI flag 后 `--json` 输出要同步加字段（契约只增不减）。
+
+### docs: detector-api 双格式契约 + Core safe_guard 对接参考 <e4e0cb0>
+detector-api.md §4 改双格式（BaseResponse 包装推荐 + 裸 results 兼容）并写明"两种封装皆无 → 游标照常推进结论丢失"的服务端红线；§7 超时改可配；§8 拆 Core 生产实现 / mock 联调桩两节（X-API-Key 语义 = Core api_keys 表密钥，401 响应体 `{success,message}` 只看状态码）。user-guide init 参数与配置表/env 列表同步（顺补历史漏项 SAITEC_CLI_MAX_QUEUE_SIZE）；SKILL.md 命令速查、operations.md mock 节、mock README 迁移标注。README 不动（命令计数与速查粒度无变化点）。
+教训: 文档矩阵"新命令/新参数"行落到 README 的只有速查表与命令计数——flag 级变化不必动 README，硬凑反而制造噪音；检查 env 列表时顺带核对 `_DETECTOR_ENV_MAP` 全集，发现 MAX_QUEUE_SIZE 历史漏项。
+
 ## 2026-11-11
 
 ### refactor: 项目全面改名 SAITEC-Cli <ec619a9>
