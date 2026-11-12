@@ -195,14 +195,17 @@ saitec-cli init --api-key "<KEY>" --detector-url "<URL>" --upstream "<监控端�
 saitec-cli init --api-key "<KEY>" --detector-url "<URL>" --upstream "<URL>" --force  # 覆盖现有
 
 # 可选参数
-#   --endpoint-type  协议格式（缺省按 URL 猜测）
-#   --name           服务名（缺省用 endpoint_type）
-#   --port           本地端口（默认 9001）
+#   --endpoint-type   协议格式（缺省按 URL 猜测）
+#   --name            服务名（缺省用 endpoint_type）
+#   --port            本地端口（默认 9001）
+#   --endpoint-path   检测接口路径（默认 /detect；对接 SAITEC Core 为
+#                     /api/v1/cli/safe-guard/detect）
 ```
 
 校验规则：
 - `api_key` 必须 ≥ 8 字符（防止拼写错）
 - `detector-url` / `upstream` 必须以 `http://` 或 `https://` 开头
+- `endpoint-path` 必须以 `/` 开头
 - 非 TTY 且未给 `--upstream` → 报错（upstream 必须显式指定）
 
 错误时退出码 1，stderr 中文错误信息。
@@ -453,7 +456,8 @@ saitec-cli tail --level error            # 按级别过滤（debug/info/warning/
     "endpoint_path": "/detect",
     "report_interval_sec": 60,
     "batch_size": 500,
-    "max_queue_size": 10000
+    "max_queue_size": 10000,
+    "timeout_sec": 30
   },
   "services": [
     {
@@ -502,10 +506,11 @@ saitec-cli tail --level error            # 按级别过滤（debug/info/warning/
 |------|------|------|------|
 | `url` | string | 检测服务器根 URL（只含 scheme+host+port） | — |
 | `api_key` | string | `X-API-Key` 头值（脱敏显示） | — |
-| `endpoint_path` | string | 上报 endpoint 路径（同一 IP:端口 下不同检测接口，如 `/api/v1/detect-v2`） | `/detect` |
+| `endpoint_path` | string | 上报 endpoint 路径（同一 IP:端口 下不同检测接口，如 SAITEC Core 的 `/api/v1/cli/safe-guard/detect`） | `/detect` |
 | `report_interval_sec` | int | 上报周期（秒） | 60 |
 | `batch_size` | int | 单次上报的批量大小 | 500 |
 | `max_queue_size` | int | 内存队列上限（超出丢最旧） | 10000 |
+| `timeout_sec` | int | 单批上报超时秒数。真实 LLM 检测慢于 mock，大批次建议调大（如 120），否则超时会反复重试 | 30 |
 
 > `url` 与 `endpoint_path` 分开配置的原因：避免 URL 带路径时的拼接歧义。上报完整地址 = `url.rstrip("/") + endpoint_path`。
 
@@ -559,6 +564,8 @@ saitec-cli start --report-interval 5        # 同上，但 CLI 优先级更高
 - `SAITEC_CLI_ENDPOINT_PATH` — detector.endpoint_path
 - `SAITEC_CLI_REPORT_INTERVAL` — detector.report_interval_sec
 - `SAITEC_CLI_BATCH_SIZE` — detector.batch_size
+- `SAITEC_CLI_MAX_QUEUE_SIZE` — detector.max_queue_size
+- `SAITEC_CLI_TIMEOUT_SEC` — detector.timeout_sec
 - `SAITEC_CLI_LOG_LEVEL` — log_level
 
 ---

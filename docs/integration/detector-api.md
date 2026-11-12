@@ -146,33 +146,53 @@ saitec-cli config set detector.endpoint_path /api/v1/detect-v2
 
 ### 4.1 成功（HTTP 200）
 
+两种封装均兼容（saitec-cli 的 reporter 自动识别）：
+
+**A. BaseResponse 包装**（SAITEC Core 服务端格式，新对接建议采用）：
+
+```json
+{
+  "success": true,
+  "message": "success",
+  "data": {
+    "results": [
+      {
+        "record_id": "e0dd6216-8518-4634-a5e0-f97fd7672c52",
+        "detection_status": "violation",
+        "risk_level": "high",
+        "detection_detail": {
+          "detector": "llm",
+          "reason": "prompt_injection"
+        },
+        "detected_at": "2026-08-21T02:34:06.069312+00:00"
+      }
+    ]
+  }
+}
+```
+
+**B. 裸 results**（仓库自带 mock detector 格式）：
+
 ```json
 {
   "results": [
-    {
-      "record_id": "e0dd6216-8518-4634-a5e0-f97fd7672c52",
-      "detection_status": "violation",
-      "risk_level": "high",
-      "detection_detail": {
-        "score": 0.949,
-        "reason": "prompt_injection",
-        "matched_rules": ["rule-e08eda34"],
-        "trace_id": "c37b20e9..."
-      },
-      "detected_at": "2026-08-21T02:34:06.069312+00:00"
-    }
+    { "record_id": "...", "detection_status": "...", "...": "同上" }
   ]
 }
 ```
 
+`results` 内每条的契约（两种封装一致）：
+
 | 字段 | 必填 | 类型 | 说明 |
 |------|------|------|------|
-| `results` | ✅ | array | 与 batch 一一对应的结论数组 |
+| `results` | ✅ | array | 与 batch 一一对应的结论数组（包装格式位于 `data.results`） |
 | `results[i].record_id` | ✅ | string | **必须回带**请求中的 record_id——saitec-cli 用它把结论关联回本地记录；**无法识别的 record_id 会被忽略** |
 | `results[i].detection_status` | ✅ | string | 枚举：`clean` / `suspicious` / `violation` / `error`（见 4.2） |
 | `results[i].risk_level` | 推荐 | string \| null | 枚举：`low` / `medium` / `high` / `critical`；`clean` 时一般 `low` 或 null |
 | `results[i].detection_detail` | 推荐 | object | 自由结构（saitec-cli 原样存 SQLite，`report --json` 透出）。建议含 `score`、`reason`、规则命中 |
 | `results[i].detected_at` | ✅ | string (ISO8601) | 检测完成时间 |
+
+> 顶层既无 `results` 也无 `data.results` 时（响应异常），saitec-cli 按空结论处理：**游标照常推进、本批结论视为丢失**——服务端务必保证逐条回带 record_id。
 
 ### 4.2 detection_status 语义
 
@@ -225,19 +245,37 @@ saitec-cli config set detector.endpoint_path /api/v1/detect-v2
 | 上报周期 | 默认 60s（用户可配，调试时可能 1-5s） | 每周期一次 POST |
 | 批量大小 | 默认 ≤500 条/批 | 用户可配 |
 | 请求体大小 | 典型 1-100 KB，极端可达数 MB（长对话） | Record 含完整对话内容 |
-| 客户端超时 | **30 秒** | 超时即断开重试；检测逻辑请在此预算内完成（异步检测可先返回 `error`/`suspicious` 结论，后台完成后靠 redo） |
+| 客户端超时 | **默认 30 秒**（`detector.timeout_sec` 可配） | 超时即断开重试；检测逻辑请在此预算内完成（真实 LLM 检测建议用户调大该值，如 120s；异步检测可先返回 `error`/`suspicious` 结论，后台完成后靠 redo） |
 | 并发 | 单用户单进程串行上报 | 无并发竞争 |
 | User-Agent | aiohttp 默认 | — |
 
 ---
 
-## 8. 最小实现参考
+## 8. 实现参考
+
+### 8.1 生产实现：SAITEC Core `safe_guard`
+
+SAITEC-Products 仓库 Core 平台内置了按本契约实现的真实检测接口（LLM 审上下文 +
+同会话前缀去重），端点 `POST /api/v1/cli/safe-guard/detect`（BaseResponse 包装格式），
+运维状态 `GET /api/v1/cli/safe-guard/status`。鉴权走 Core 的 AuthMiddleware
+（`X-API-Key` 为 Core 平台 `api_keys` 表签发的密钥，401 时响应体为
+`{"success": false, "message": "..."}`——saitec-cli 只按状态码分类，不解析 401 响应体）。
+部署与配置详见 Core 仓库 `docs/cli_service/safe-guard.md`。
+
+用户侧对接：
+
+```bash
+saitec-cli init --api-key "<Core签发的Key>" --detector-url "http://<core-host>:8080" \
+    --upstream "https://api.deepseek.com" --endpoint-path "/api/v1/cli/safe-guard/detect"
+```
+
+### 8.2 本地联调桩：mock detector
 
 仓库自带一个可运行的 mock（**FastAPI**），可直接参考或当作对接前的联调桩：
 
 - 代码：[`tests/mock_detector/server.py`](../tests/mock_detector/server.py)
 - 启动：`uvicorn server:app --app-dir tests/mock_detector --host 127.0.0.1 --port 8000`
-- 它按 5% 概率随机标 violation，含 `GET /records` 查询端点
+- 它按 5% 概率随机标 violation，含 `GET /records` 查询端点（裸 results 格式，客户端同样兼容）
 
 核心逻辑摘录（约 30 行即可对接）：
 

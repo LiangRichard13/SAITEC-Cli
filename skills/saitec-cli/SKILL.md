@@ -36,7 +36,8 @@ description: 操作 saitec-cli（命令名 saitec-cli）——大模型 API 流�
 
 ```bash
 # 生命周期
-saitec-cli init --api-key KEY --detector-url URL --upstream URL [--endpoint-type T] [--name N] [--port P] [--force]
+saitec-cli init --api-key KEY --detector-url URL --upstream URL [--endpoint-type T] [--name N] [--port P] [--endpoint-path P] [--force]
+                                       # 对接 SAITEC Core: --endpoint-path /api/v1/cli/safe-guard/detect
 saitec-cli start [--report-interval N] [--batch-size N]   # 后台子进程 + PID 文件
 saitec-cli monitor [--report-interval N]                  # 前台实时监控（人盯）：异常彩色输出，Ctrl+C 退出
 saitec-cli stop [--timeout N]

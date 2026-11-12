@@ -75,6 +75,8 @@ MOCK_DETECTION_MODE=llm uvicorn server:app --app-dir tests/mock_detector --host 
 
 验证上报到达：`curl -s http://127.0.0.1:8000/records | python -m json.tool`（mock 内存里的记录）。
 
+> **真实检测服务器（SAITEC Core）**：`saitec-cli init --api-key <Core签发的Key> --detector-url http://<core-host>:8080 --upstream <端点> --endpoint-path /api/v1/cli/safe-guard/detect`。LLM 检测耗时高于 mock，建议 `config set detector.timeout_sec 120`（默认 30s，大批次超时会反复重试）。运行状态排障：`curl -H "X-API-Key: <key>" http://<core-host>:8080/api/v1/cli/safe-guard/status`。
+
 联调脚本：`python tests/test_chat/chat_probe.py [N]`（经代理发 N 条混合内容消息；配置在 `tests/test_chat/.env`）。
 
 ---
