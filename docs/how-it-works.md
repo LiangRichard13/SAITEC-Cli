@@ -40,11 +40,11 @@ Claude Code ──请求──→ ① 本地代理端口(9001..)
 | 层 | 目录 | 一句话职责 | 通俗理解 |
 |---|---|---|---|
 | L1 | `core/` | 数据模型、配置加载校验、路径、纯工具函数 | 最低层的"词汇表"，谁都能用，它不用任何人 |
-| L2 | `recorder/` `reporter/` `store/` | 三个独立的存储/网络小件：JSONL 落盘、HTTP 上报、SQLite 读写 | 三个互不相识的工人，各自只干一件事 |
+| L2 | `recorder/` `reporter/` `store/` `core_api/` | 存储/网络小件：JSONL 落盘、safe_guard 上报、SQLite 读写、Core 平台 HTTP 客户端 | 各自只干一件事，互不相识 |
 | L3 | `adapters/` | 三种协议（OpenAI Chat/Responses、Anthropic）的"翻译官"：把不同格式的请求/响应解析成统一的 Record | 让上层不用关心"这是 OpenAI 还是 Anthropic 的报文" |
 | L4 | `proxy/` | 反向代理本体：收请求→转发→透传响应，边透传边喂给 adapter | 整个工具的"前台"，但故意做得极薄 |
-| L5 | `runtime/` | **唯一编排者**：把上面所有件拼起来，跑后台循环（落盘、上报、续传） | 乐队的指挥，所有件由它创建和注入 |
-| L6 | `cli/` | 命令行入口：15 个命令，解析参数→调 runtime/store→输出 | 面子，不含业务逻辑 |
+| L5 | `runtime/` | 代理编排（落盘、上报、续传）+ `core_ops` 平台任务/文件编排 | 乐队的指挥，所有件由它创建和注入 |
+| L6 | `cli/` | 命令行入口：核心命令 + config/service/core 子命令组，解析参数→调 runtime/store→输出 | 面子，不含业务逻辑 |
 
 **为什么这样分？** 两句话：① 每层可以被单独测试（下层不知道上层的存在）；② 想加新协议只动 L3，想加新命令只动 L6，互相不传染。
 
@@ -166,16 +166,18 @@ Windows 没有 SIGTERM 优雅信号，所以用 flag 文件轮询这个朴素办
 ```
 src/saitec_cli/
 ├── core/       models.py(Record等数据类)  config.py(加载+三级覆盖)  paths.py(~/.saitec-cli解析)
+├── core_api/   client.py                 Core 平台 HTTP 客户端（JSON/上传/下载）
 ├── recorder/   recorder.py               内存队列→JSONL 批量落盘
 ├── reporter/   reporter.py               HTTP 上报 + 错误三分类
 ├── store/      store.py                  SQLite WAL(detection_results+report_cursor)
 ├── adapters/   base.py(抽象) + openai_chat_completions/openai_responses/anthropic_messages.py
 ├── proxy/      server.py                 ProxyService：catch-all 转发 + SSE 透传
-├── runtime/    runtime.py                编排一切：start/stop/上报循环/续传/event_sink
+├── runtime/    runtime.py                代理编排：start/stop/上报循环/续传/event_sink
+│              core_ops.py                Core 平台任务/文件/评测编排
 └── cli/        main.py(typer入口+编码修正) _common.py(输出/视觉/路径) _serve.py(后台子进程入口)
-                commands/  15 个命令一文件一命令
+                commands/  核心命令一文件一命令；core/ 为平台命令子包
 tests/          镜像 src 分层（test_proxy 对应 proxy 层……）+ mock_detector/(联调桩) + test_chat/(发真实流量的手动脚本)
-docs/           design/(正式规格) integration/detector-api.md(对接契约) issues/(历史问题清单)
+docs/           design/(正式规格) integration/(detector-api、core-api 对接契约) issues/(历史问题清单)
 ```
 
 加新东西往哪写：新协议→`adapters/` 新文件；新命令→`cli/commands/` 新文件；新配置字段→core/models + core/config + config_cmd + init **四处同步**（漏一处就是 bug，详见 AGENTS.md §3 的决策表）。

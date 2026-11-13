@@ -8,16 +8,18 @@
 
 [![PyPI](https://img.shields.io/badge/pypi-saitec--cli-3775A9?style=flat-square&logo=pypi&logoColor=white)](https://pypi.org/project/saitec-cli/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-252%20passed-2EA043?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-390%20passed-2EA043?style=flat-square)](tests/)
 [![License](https://img.shields.io/badge/license-proprietary-CB3627?style=flat-square)](LICENSE)
 
-[快速上手](#-快速上手) · [特性](#-特性) · [工作原理](#-工作原理) · [命令速查](#-命令速查) · [用户手册](docs/user-guide.md) · [Detector 对接](docs/integration/detector-api.md)
+[快速上手](#-快速上手) · [特性](#-特性) · [工作原理](#-工作原理) · [命令速查](#-命令速查) · [用户手册](docs/user-guide.md) · [Detector 对接](docs/integration/detector-api.md) · [Core API](docs/integration/core-api.md)
 
 </div>
 
 ---
 
 把 Claude Code / Codex / 自写脚本的 LLM 请求指到本地端口（9001 起），`saitec-cli` 在本机做透明反向代理：请求原样转发到真实上游，同时把每一轮对话**归一化记录**下来，按周期上报到内部安全检测服务器，检测结果落本地 SQLite——随时查询、导出审计报告。
+
+同一个平台连接还支持**直接调用 Core 后端**：`saitec-cli core ...` 可以做文本/图像/视频检测、LLM 评测、文件上传下载、任务查询与产物下载，能力对齐 SAITEC-Skills MCP。
 
 ```text
 $ saitec-cli start
@@ -47,7 +49,8 @@ $ saitec-cli export -f html  # 导出审计报告（可打印转 PDF）
 | 🔄 **断点续传** | 上报游标 + 启动重放：detector 宕机恢复后自动补报积压 |
 | 📊 **检测留档** | 结论写本地 SQLite；`export` 一键导出 Markdown/HTML 审计报告 |
 | 🛰️ **实时监控** | `monitor` 前台彩色面板给人盯，`report --json` 给 Agent 巡检 |
-| 🤖 **Agent 友好** | 全命令 `--json` 结构化输出，内置 [Agent 操作 Skill](#-agent-集成) |
+| ☁️ **直连 Core 平台** | `core` 命令直接调检测/评测、文件上传下载、任务查询；与 safe_guard 共用一套地址/Key |
+| 🤖 **Agent 友好** | 核心命令与 `core` 叶子命令支持 `--json` 结构化输出（`monitor` 为人类实时面板，无 `--json`），内置 [Agent 操作 Skill](#-agent-集成) |
 
 ## 🚀 快速上手
 
@@ -63,6 +66,15 @@ saitec-cli start
 
 # 3. 等一个上报周期后查结果
 saitec-cli report
+```
+
+只使用 Core 平台能力（不做代理监控）：
+
+```bash
+saitec-cli init --api-key "<KEY>" --detector-url "http://<core-host>:8080" --no-service
+saitec-cli core status --json
+saitec-cli core detect text --text "待检测文本" --wait --json
+saitec-cli core file upload ./data.jsonl --type dataset --json
 ```
 
 支持任意 OpenAI / Anthropic 兼容上游：
@@ -125,9 +137,10 @@ Claude Code ──请求──→ ① 本地代理端口(9001..)
 | 配置 | `init` · `validate` · `config get/set/unset/list` · `service add/remove/set/list` |
 | 生命周期 | `start` · `monitor` · `stop` · `restart` · `status` · `logs` |
 | 运维 | `report` · `redo` · `purge` · `export` |
+| Core 平台 | `core status` · `core models list` · `core credentials set` · `core file upload/download/list/read` · `core detect text/image/video` · `core eval safety/general/corpus` · `core task list/get/wait/cancel/artifacts` · `core skill list/get/search` |
 | 调试 | `doctor` · `tail` |
 
-每个命令都支持 `--json`（Agent 契约：字段只增不减）与 `--config <path>`（多实例隔离）。完整用法与排错见 **[`docs/user-guide.md`](docs/user-guide.md)**。
+所有 `core` 叶子命令支持 `--json`，除 `core skill` 外支持 `--config <path>`；`monitor` 专为人设计、无 `--json`。完整用法与排错见 **[`docs/user-guide.md`](docs/user-guide.md)**。
 
 ## 🤖 Agent 集成
 
@@ -145,14 +158,15 @@ mkdir -p .claude/skills && ln -s ../../skills/saitec-cli .claude/skills/saitec-c
 ```text
 src/saitec_cli/
 ├── core/       # L1 数据模型 + 配置三级覆盖
+├── core_api/   # L2 Core 平台 HTTP 客户端（JSON/上传/下载/错误映射）
 ├── recorder/ reporter/ store/   # L2 JSONL 落盘 · HTTP 上报 · SQLite
 ├── adapters/   # L3 三协议解析（SSE 流重组）
 ├── proxy/      # L4 反向代理核心（catch-all 透传）
-├── runtime/    # L5 编排：上报循环/游标续传/event_sink
-└── cli/        # L6 typer 入口 + 15 个命令
+├── runtime/    # L5 编排：代理上报循环 + core_ops 平台操作
+└── cli/        # L6 typer 入口 + 14 个顶层命令 + config/service/core 子命令组
 
 tests/          # 镜像分层单测 + mock_detector 联调桩 + test_chat 三协议探针 + verification 双重验证清单
-docs/           # user-guide / how-it-works / design / integration
+docs/           # user-guide / how-it-works / design / integration（detector-api、core-api）
 ```
 
 开发约定见 [AGENTS.md](AGENTS.md)，项目进度见 [PROGRESS.md](PROGRESS.md)。

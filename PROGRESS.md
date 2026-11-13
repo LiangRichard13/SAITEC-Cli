@@ -7,6 +7,27 @@
 
 ## 2026-11-12
 
+### feat: core 子命令直连 Core 平台（检测/评测/文件/任务） （待提交）
+新增 `saitec-cli core` 命令组，直接调用 Core `/api/v1/skills/*`、`/api/v1/tasks*`、
+`/api/v1/tested-models` 与 file-manage 接口，覆盖 MCP 的检测/评测/文件/任务/模型/
+凭证能力；连接复用 `detector.url` + `detector.api_key`，不引入第二套 base_url/Key。
+新增 L2 `core_api/`（aiohttp、BaseResponse 解包、multipart、流式下载、错误分类）、
+L5 `runtime/core_ops.py`（任务等待/取消/产物、上传→检测/评测、dataset 构造）、
+L6 `cli/commands/core/`（status/models/credentials/file/detect/eval/task/skill）。
+评测请求全部字段展开为 flags；`judge_callers` 用可重复 `--judge-caller-json`。
+`init --no-service` 支持只配置平台连接；`config set detector.api_key` 输出改为脱敏。
+经 4 个子代理两轮审查，修复下载路径/中文 filename*、网络错误分类、rich markup、restart/monitor 空 services、dataset/judge/shape 校验等；验证：全量 pytest 390 passed（新增 122）；真实 Key 只读 E2E 通过（status/models/
+task list/get/wait/cancel/artifacts/file list/read/download），文件上传→列表→读取→
+下载→REST 删除 round-trip 字节一致；未创建检测/评测任务。
+教训: Core 业务失败大量是 HTTP 200 + `success=false`，只看状态码会把"任务/文件不存在"
+当成功；任务取消是 `failed + "Cancelled by user"`，不是独立状态。
+
+### docs: Core API 契约 + skill/用户文档同步 （待提交）
+新增 `docs/integration/core-api.md`（端点/任务状态机/文件/评测字段/错误码/示例）；
+SKILL.md 增 core 命令速查与 3 个 recipe；references/operations.md 增 §6；
+README/user-guide/AGENTS/设计文档/PROGRESS 同步。真实 E2E 输出均用 `--json` 保存到
+`/tmp/core-smoke`，扫描确认无 API Key 明文。
+
 ### feat: reporter 响应双格式解析 + detector.timeout_sec 可配 + init --endpoint-path <f6c7a21>
 对接 SAITEC-Products Core 新落的真实检测接口（`POST /api/v1/cli/safe-guard/detect`，检测逻辑即 mock llm 模式的移植，BaseResponse 包装 `data.results`）：`_parse_response` 双格式兼容——顶层 `results` 缺失时解包 `data.results`，mock 裸格式与旧服务端不破坏；新配置字段 `detector.timeout_sec`（默认 30，env `SAITEC_CLI_TIMEOUT_SEC`，models/config/config_cmd/init 四处同步），reporter 上报超时改读配置；init 增 `--endpoint-path`（校验以 / 开头，json 输出增 endpoint_path 字段）。全量 265 绿（+11）。
 教训: 服务端换响应封装时，客户端按"顶层优先、缺则解包"做双格式兼容，可同时服务新旧两端，契约文档只需标注推荐格式；新增 CLI flag 后 `--json` 输出要同步加字段（契约只增不减）。

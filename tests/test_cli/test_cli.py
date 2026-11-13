@@ -65,6 +65,79 @@ def test_init_missing_api_key(isolated: Path) -> None:
     assert "缺少 api_key" in result.stderr
 
 
+def test_init_no_service_creates_platform_only_config(isolated: Path) -> None:
+    """--no-service：只配置平台连接，不创建监控服务；validate 通过、start 给出提示。"""
+    result = runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://core:8080",
+         "--no-service"],
+    )
+    assert result.exit_code == 0
+    cfg = json.loads((isolated / "config.json").read_text())
+    assert cfg["services"] == []
+    assert cfg["detector"]["url"] == "http://core:8080"
+
+    validated = runner.invoke(app, ["validate"])
+    assert validated.exit_code == 0
+
+    started = runner.invoke(app, ["start"])
+    assert started.exit_code == 1
+    assert "没有监控服务" in started.stderr
+
+
+def test_init_no_service_conflicts_with_service_options(isolated: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://core:8080",
+         "--no-service", "--upstream", "http://127.0.0.1:9999"],
+    )
+    assert result.exit_code == 1
+    assert "--no-service" in result.stderr
+    assert not (isolated / "config.json").exists()
+
+    result = runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://core:8080",
+         "--no-service", "--port", "9001"],
+    )
+    assert result.exit_code == 1
+    assert "--no-service" in result.stderr
+
+
+def test_init_no_service_human_output_is_platform_mode(isolated: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://core:8080",
+         "--no-service"],
+    )
+    assert result.exit_code == 0
+    assert "平台模式" in result.stdout
+    assert "无监控服务，用" not in result.stdout
+
+
+def test_restart_no_services_rejected(isolated: Path) -> None:
+    runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://core:8080",
+         "--no-service"],
+    )
+    result = runner.invoke(app, ["restart", "--json"])
+    assert result.exit_code == 1
+    data = json.loads(result.stdout)
+    assert data["error"]["code"] == "NO_SERVICES"
+
+
+def test_monitor_no_services_rejected(isolated: Path) -> None:
+    runner.invoke(
+        app,
+        ["init", "--api-key", "sk-test-12345678", "--detector-url", "http://core:8080",
+         "--no-service"],
+    )
+    result = runner.invoke(app, ["monitor"])
+    assert result.exit_code == 1
+    assert "没有监控服务" in result.stderr
+
+
 # ============================================================
 # validate
 # ============================================================
@@ -176,6 +249,19 @@ def test_config_get_redacts_api_key(ready_config: Path) -> None:
     # 完整明文不得出现在任何输出
     full_key = json.loads((ready_config / "config.json").read_text())["detector"]["api_key"]
     assert full_key not in result.stdout
+
+
+def test_config_set_redacts_api_key_in_output(ready_config: Path) -> None:
+    """config set 成功输出不得回显明文 Key。"""
+    result = runner.invoke(
+        app, ["config", "set", "detector.api_key", "sk-new-secret-12345678", "--json"]
+    )
+    assert result.exit_code == 0
+    assert "sk-new-secret-12345678" not in result.stdout
+    assert "***" in result.stdout
+    # 配置文件本身必须写入完整 Key
+    cfg = json.loads((ready_config / "config.json").read_text())
+    assert cfg["detector"]["api_key"] == "sk-new-secret-12345678"
 
 
 def test_config_list_redacts_api_key(ready_config: Path) -> None:

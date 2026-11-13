@@ -1,6 +1,6 @@
 """cli — Layer 6
 
-命令行入口（typer）。13 个命令详见 `docs/design/saitec-cli-design.md` §13。
+命令行入口（typer）。命令与子命令组清单以 `saitec-cli --help` 为准。
 """
 from .main import app
 

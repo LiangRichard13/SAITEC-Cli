@@ -73,7 +73,7 @@ pip install -e ".[mock,dev]"
 
 ```bash
 saitec-cli --help
-# 应输出 Usage 和 15 个命令列表
+# 应输出 Usage 和命令列表（含 core 子命令组）
 ```
 
 ---
@@ -182,7 +182,7 @@ saitec-cli stop
 
 ## 4. 完整命令参考
 
-> 15 个命令分 5 类。所有命令都支持 `--config <path>`（自定义配置文件）和 `--json`（机器可读 JSON 输出；`monitor` 除外）。
+> 核心命令 + `config` / `service` / `core` 子命令组。所有 `core` 叶子命令支持 `--json`，除 `core skill` 外支持 `--config <path>`；`monitor` 专为人设计、无 `--json`。
 
 ### 4.1 配置类
 
@@ -200,13 +200,14 @@ saitec-cli init --api-key "<KEY>" --detector-url "<URL>" --upstream "<URL>" --fo
 #   --port            本地端口（默认 9001）
 #   --endpoint-path   检测接口路径（默认 /detect；对接 SAITEC Core 为
 #                     /api/v1/cli/safe-guard/detect）
+#   --no-service      只配置平台连接，不创建监控服务（不需要 --upstream）
 ```
 
 校验规则：
 - `api_key` 必须 ≥ 8 字符（防止拼写错）
 - `detector-url` / `upstream` 必须以 `http://` 或 `https://` 开头
 - `endpoint-path` 必须以 `/` 开头
-- 非 TTY 且未给 `--upstream` → 报错（upstream 必须显式指定）
+- 非 TTY 且未给 `--upstream`（且未用 `--no-service`）→ 报错（upstream 必须显式指定）
 
 错误时退出码 1，stderr 中文错误信息。
 
@@ -261,7 +262,7 @@ saitec-cli config list --json
 **注意**：
 - `config set` 会自动备份当前 config 为 `config.json.bak.<时间戳>`
 - `config set` 写入会**立即做一次完整校验**，校验失败则不写入（原子回滚）
-- `api_key` 字段在 `get` / `list` 输出中**自动脱敏**为 `***`
+- `api_key` 字段在 `get` / `set` / `list` 输出中**自动脱敏**为 `***`（配置文件本身仍写入完整值）
 
 ### 4.2 生命周期类
 
@@ -431,6 +432,80 @@ saitec-cli tail --level error            # 按级别过滤（debug/info/warning/
 
 类似 `tail -f`，读 JSONL 文件新写入的行。**注：仅适合交互式终端**，Agent 批量查询用 `report`。
 
+### 4.5 Core 平台类
+
+`core` 命令直接调 SAITEC Core 后端，不要求本地代理 `start`。它和 safe_guard
+上报共用同一套 `detector.url` + `detector.api_key`；只使用平台能力时：
+
+```bash
+saitec-cli init --api-key "<KEY>" --detector-url "http://<core-host>:8080" --no-service
+saitec-cli core status --json
+```
+
+#### 状态 / 模型 / 凭证
+
+```bash
+saitec-cli core status --json              # health / auth / task_count
+saitec-cli core models list --json         # 自有模型（Key 打码）+ 平台模型目录
+saitec-cli core credentials set --skill safety-eval \
+  --env-name DEEPSEEK_API_KEY --model-id <model_id> --json
+```
+
+#### 文件
+
+```bash
+saitec-cli core file upload ./data.jsonl --type dataset --json
+saitec-cli core file list --json
+saitec-cli core file read <file_id> --json
+saitec-cli core file download <file_id> -o ./downloads/ --overwrite --json
+```
+
+上传返回的 `storage_uri` 可直接用于 `--image-uri` / `--video-uri` / `--dataset-path`。
+下载默认落 `{config_dir}/downloads/`；先写 `.part` 再原子替换。
+
+#### 检测
+
+```bash
+saitec-cli core detect text --text "待检测文本" --wait --json
+saitec-cli core detect image --file ./x.png --wait --json
+saitec-cli core detect video --file ./x.mp4 --wait --json
+saitec-cli core detect text-batch --items ./items.json --wait --json
+```
+
+#### 评测
+
+```bash
+saitec-cli core eval safety --task-name t --prompt "..." --wait --json
+saitec-cli core eval general --task-name t --prompt "..." --judge-model-name echo --wait --json
+saitec-cli core eval corpus --task-name t --text "..." --wait --json
+```
+
+评测请求的全部字段（caller / judge_caller / dataset / attacks / chunking /
+SiliconFlow caller 等）都展开为 flags；完整参数表见
+[`docs/integration/core-api.md`](integration/core-api.md)。
+
+#### 任务
+
+```bash
+saitec-cli core task list --json
+saitec-cli core task get <task_id> --json
+saitec-cli core task wait <task_id> --interval 5 --timeout 3600 --json
+saitec-cli core task cancel <task_id> --json
+saitec-cli core task artifacts <task_id> --role report --json
+```
+
+创建类命令默认只返回 `local_task_id`；`--wait` 才轮询。任务状态只有
+`running/succeeded/failed`；取消是 `failed + "Cancelled by user"`。
+
+#### 技能文档
+
+```bash
+saitec-cli core skill list
+saitec-cli core skill get operations
+saitec-cli core skill search "task wait"
+saitec-cli core skill list --dir /path/to/SAITEC-Skills/skills
+```
+
 ---
 
 ## 5. 配置文件详解
@@ -471,6 +546,10 @@ saitec-cli tail --level error            # 按级别过滤（debug/info/warning/
   "log_level": "INFO"
 }
 ```
+
+> `detector.url` + `detector.api_key` 是**平台连接**：safe_guard 上报和
+> `saitec-cli core ...` 共用。`init --no-service` 会生成 `services: []` 的配置，
+> 只用于 `core` 命令；`start` 会提示没有监控服务。
 
 `service add` 加多个端点后的 services 示例（DeepSeek Anthropic 口 + 本地模型）：
 
@@ -733,6 +812,22 @@ saitec-cli restart
 # 重新发请求触发上报，会自动建新 results.db
 ```
 
+### 7.9 `core` 命令报错
+
+| 现象 | 处理 |
+|---|---|
+| 401 `Invalid or expired API Key` | `config set detector.api_key` 更新 Key |
+| 403 `No active subscription` | 账号没有有效订阅；先创建/升级订阅 |
+| 402 平台模型余额不足 | 充值或改用自有模型 |
+| 422 `detail` 列表 | 请求字段不合法；按字段修正 |
+| 创建返回 `running` 但任务 `failed` | 下游执行失败；看 `error_message`（不是提交失败） |
+| `core task wait` exit 3 | 总超时；任务可能仍在跑，继续 wait 或稍后 get |
+| 下载得到 JSON | HTTP 200 + `success=false`；CLI 不会写盘，按 message 修正 |
+| 命令打到 mock | `detector.url` 指向了 mock；改成 Core 地址 |
+
+`core models list` 对自有模型 Key 打码；明文 Key 要从网页端管理，不要试图从 CLI
+输出复制。
+
 ---
 
 ## 8. 安全注意事项
@@ -853,8 +948,8 @@ saitec-cli redo <record_id>
 |--------|------|
 | 0 | 成功 |
 | 1 | 用户错误（参数错、校验失败） |
-| 2 | 运行时错误（启动失败、配置未找到、IO 失败） |
-| 3 | 检测服务器错误（AUTH 失败、长时间不可达） |
+| 2 | 运行时错误（启动失败、IO 失败）；Click/Typer 用法错误（缺必填参数、未知 flag）也返回 2 |
+| 3 | 检测服务器 / Core 平台远端错误（AUTH 失败、网络、超时、任务等待超时） |
 | 4 | 内部错误（异常未捕获、Python bug） |
 
 `--json` 输出对应有 `ok: true/false` + `error.code` 字段。
@@ -863,7 +958,7 @@ saitec-cli redo <record_id>
 
 ## 附录 B：与 Claude Code / Codex 等的协作
 
-`saitec-cli` 本身**支持 Agent 操作**——所有命令都有 `--json` 输出，错误信息结构化。
+`saitec-cli` 本身**支持 Agent 操作**——核心命令与 `core` 叶子命令支持 `--json` 输出（`monitor` 例外）；应用层错误对象写 stdout，Click 参数错误写 stderr。
 
 **典型 Agent 调用流程**：
 
@@ -871,9 +966,13 @@ saitec-cli redo <record_id>
 # 1. 检查是否在跑
 saitec-cli status --json
 
-# 2. 如果不在跑
-saitec-cli init --api-key "$KEY" --detector-url "$URL" --force
+# 2a. 如果不在跑（代理监控）
+saitec-cli init --api-key "$KEY" --detector-url "$URL" --upstream "$UPSTREAM" --force
 saitec-cli start --json
+
+# 2b. 只做 Core 平台调用（不要执行 start）
+# saitec-cli init --api-key "$KEY" --detector-url "$URL" --no-service
+# saitec-cli core status --json
 
 # 3. 健康检查
 saitec-cli doctor --json

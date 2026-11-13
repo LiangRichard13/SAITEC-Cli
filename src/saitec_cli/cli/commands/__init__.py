@@ -1,3 +1,1 @@
-"""CLI commands 包 — 13 个命令按文件组织
-
-详见 `docs/design/saitec-cli-design.md` §13。"""
+"""CLI commands 包 — 核心命令一文件一命令；core 平台命令在 core/ 子包"""

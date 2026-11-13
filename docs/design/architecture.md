@@ -119,6 +119,10 @@ class ConfigErrorCode(str, Enum):
 
 ### Layer 2 — `recorder` / `reporter` / `store`（独立底层 IO）
 
+> 2026-11 新增 `core_api/`：Core 平台 HTTP 客户端（aiohttp），与 `reporter` 并列的
+> L2 IO 组件。负责 URL 拼接、`X-API-Key`、BaseResponse 解包、multipart 上传、
+> 流式下载与错误分类；只依赖 L1，不 import `store` / `runtime` / `cli`。
+
 **职责**：分别负责"记录"、"上报"、"存储"三件不同的 IO 事务。每层只对自己的 IO 负责，**不互相调用**。
 
 **`recorder`**：
@@ -264,6 +268,10 @@ class ProxyService:
 
 ### Layer 5 — `runtime`（运行时编排）
 
+> 2026-11 新增 `runtime/core_ops.py`：`core` 命令的业务编排（状态/模型/凭证、
+> 文件上传下载、检测/评测提交、任务等待/取消/产物）。它 import `core_api` 与
+> `core`，由 L6 CLI 调用；代理运行时 `runtime.py` 的职责不变。
+
 **职责**：唯一的编排者。持有所有层实例；负责启动、停止、定时任务、状态汇总。
 
 **对外暴露**：
@@ -313,6 +321,10 @@ return Runtime(config, sources)
 ---
 
 ### Layer 6 — `cli`（最顶层）
+
+> 2026-11 新增 `core` 子命令组：`core status/models/credentials/file/detect/eval/task/skill`，
+> 直接调用 Core 平台。完整命令树与参数见 `saitec-cli core --help` 和
+> `docs/integration/core-api.md`；下方旧命令清单仅保留为早期设计示意。
 
 **职责**：解析命令行、调用 `runtime` 的接口、按"双形态输出契约"输出结果。
 
@@ -391,13 +403,13 @@ def tail(): ...
 | `doctor` | 自检 | 端口 / API / 磁盘 / SQLite / JSONL 多项验证 |
 | `tail` | 实时跟踪 | 监听 JSONL append 事件流 |
 
-**依赖**：仅 `runtime`（间接通过 `core` 拿配置）。
+**依赖**：核心命令经 `runtime`（间接通过 `core` 拿配置）；`core` 命令例外，直接依赖 L2 `core_api`，复杂编排在 `runtime/core_ops.py`。
 
 **特点**：薄壳层。**所有业务逻辑都在 `runtime` 及其下层**。`cli` 替换为 GUI / TUI / HTTP API 都不影响业务。
 
 #### 输出契约（Agent 友好）
 
-CLI 不是只给人看的，**必须支持 Agent 解析**。所有命令遵循三条约：
+CLI 不是只给人看的，**必须支持 Agent 解析**。核心命令与 `core` 叶子命令遵循三条约（`monitor` 专为人设计，无 `--json`）：
 
 **1. 双形态输出**
 
@@ -438,7 +450,7 @@ Agent 用 `$?` 即可判定下一步动作。
 **3. `stdout` / `stderr` 分离**
 
 - 数据 → `stdout`（Agent 重定向 `2>/dev/null` 即可拿干净数据）
-- 日志 / 错误 → `stderr`（人类直接看错误流）
+- 日志 / 错误 → `stderr`（人类直接看错误流；`--json` 的应用层错误对象仍在 stdout，Click 参数错误才走 stderr）
 
 **错误输出格式（`--json` 形态下）**：
 
@@ -506,10 +518,14 @@ saitec-cli init --api-key "$API_KEY" --detector-url "http://detector:8080" --con
 | R1 | 层编号小的**不得** import 层编号大的 |
 | R2 | 同一层内部目录互不引用（避免同层循环） |
 | R3 | `proxy` 只允许 import `core` / `adapters` / `recorder` |
-| R4 | `runtime` 是唯一允许导入多个下层的层（编排需要） |
+| R4 | `runtime` 是唯一允许导入多个下层的层（编排需要）；`cli/commands/{report,redo,core}` 的既有 L2 直连是已记录例外 |
 | R5 | `core` 不得 import 任何业务层（只能 import 标准库） |
 | R6 | `cli` 不得被任何非 `cli` 文件 import |
 | R7 | 任何层都不得 import 第三方 HTTP 框架、数据库驱动在 `core` 中 |
+
+> 既有例外：`cli/commands/report.py`、`redo.py` 直接依赖 L2 `store` / `reporter`，
+> `cli/commands/core/` 直接依赖 L2 `core_api`。Core 的复杂业务编排仍放在
+> L5 `runtime/core_ops.py`，避免把任务状态机写进命令层。
 
 **检查手段**（实现阶段）：用 `pydeps` / `importlinter` 跑依赖图，作为 CI 检查。
 

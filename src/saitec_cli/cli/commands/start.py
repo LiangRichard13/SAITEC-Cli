@@ -11,6 +11,7 @@ import typer
 from .._common import (
     EXIT_OK,
     EXIT_RUNTIME_ERROR,
+    EXIT_USER_ERROR,
     OK,
     ROCKET,
     client_env_hint as _client_env_hint,
@@ -103,6 +104,18 @@ def start_cmd(
                         {"field": e.field, "message": e.message} for e in errors
                     ]},
              exit_code=EXIT_RUNTIME_ERROR)
+        return
+
+    if not config.services:
+        emit(json_output=json_output, ok=False,
+             error={
+                 "code": "NO_SERVICES",
+                 "message": (
+                     "配置中没有监控服务：用 `saitec-cli service add <name> --upstream <URL>` 添加；"
+                     "仅使用 `saitec-cli core ...` 平台命令时不需要 start"
+                 ),
+             },
+             exit_code=EXIT_USER_ERROR)
         return
 
     # 2. 检查已有实例

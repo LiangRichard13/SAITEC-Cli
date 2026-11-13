@@ -23,6 +23,13 @@ def now_iso8601() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
+def mask_secret(value: str | None) -> str:
+    """敏感值脱敏：保留前 3 位，其余用 *** 代替。"""
+    if not value or not isinstance(value, str):
+        return "***"
+    return value[:3] + "***" if len(value) > 3 else "***"
+
+
 def redact_headers(h: dict) -> dict:
     """脱敏请求/响应 headers 中的敏感字段（Authorization / API Key 等）
 

@@ -152,6 +152,9 @@ VALUES (1, NULL, NULL, '1970-01-01T00:00:00Z');
 - 写入方式：append-only，每行一个 JSON 对象，UTF-8 编码
 - 顺序追加（用 `O_APPEND` 标志确保原子性）
 
+> Core 平台 `core file download` 的默认目录是 `<config_dir>/downloads/`；
+> `core` 任务/文件元数据 v1 不入 SQLite（无本地缓存），以 Core 远端为准。
+
 ### 4.2 单行格式（与 `core.models.Record` 一致）
 
 ```json

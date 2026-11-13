@@ -27,7 +27,7 @@ from .._common import (
 )
 from ...core.config import upstream_endpoint_warning, validate_config
 from ...core.models import AppConfig, DetectorConfig, EndpointSpec
-from ...core.utils import now_iso8601
+from ...core.utils import mask_secret, now_iso8601
 
 app = typer.Typer(help="配置管理（get / set / unset / list）")
 
@@ -48,9 +48,7 @@ _SECRET_FIELDS = {"detector.api_key", "api_key"}
 def _redact(value: Any, field: str) -> Any:
     """敏感字段脱敏：api_key 显示 sk-***"""
     if field in _SECRET_FIELDS or field.endswith(".api_key"):
-        if value and isinstance(value, str):
-            return value[:3] + "***" if len(value) > 3 else "***"
-        return "***"
+        return mask_secret(value if isinstance(value, str) else None)
     return value
 
 
@@ -318,7 +316,7 @@ def set_cmd(
             if not json_output:
                 err_console.print(f"{WARN} {w}")
 
-    result: dict[str, Any] = {"key": key, "value": parsed, "saved": True,
+    result: dict[str, Any] = {"key": key, "value": _redact(parsed, key_lower), "saved": True,
                               "note": "修改已保存。重启后生效（saitec-cli restart）"}
     if warnings and json_output:
         result["warnings"] = warnings

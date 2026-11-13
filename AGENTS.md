@@ -1,6 +1,6 @@
 # AGENTS.md — 项目记忆（开发约定）
 
-> **分工**：开发约定看本文档；项目进度看 [PROGRESS.md](PROGRESS.md)（按需读取）；CLI 使用方法看 `skills/saitec-cli/SKILL.md` 与 `docs/user-guide.md`；检测服务器对接看 `docs/integration/detector-api.md`。本文档不重复它们的内容。
+> **分工**：开发约定看本文档；项目进度看 [PROGRESS.md](PROGRESS.md)（按需读取）；CLI 使用方法看 `skills/saitec-cli/SKILL.md` 与 `docs/user-guide.md`；检测服务器对接看 `docs/integration/detector-api.md`；Core 平台直连契约看 `docs/integration/core-api.md`。本文档不重复它们的内容。
 >
 > **Claude Code 桥接**：本项目约定统一写在 AGENTS.md（跨工具标准），skill 内容在 `skills/saitec-cli/`（入库）。Claude Code 不自动读它们——本地自建（`.claude/` 已 gitignore 不入库）：
 > 1. `CLAUDE.md` 写一行 `@AGENTS.md`（import 语法）
@@ -22,15 +22,18 @@
 src/saitec_cli/                  # 六层架构，依赖只能向下（见 §3）
 ├── core/                    # L1 最底层：models(数据模型) config(加载/校验/三级覆盖)
 │                            #    paths(路径解析 ~/.saitec-cli) utils(纯函数)
+├── core_api/                # L2：Core 平台 HTTP 客户端（X-API-Key / BaseResponse 解包 /
+│                            #    multipart 上传 / 流式下载 / 错误分类）
 ├── recorder/                # L2：recorder.py（内存队列 + JSONL 按天落盘，崩溃恢复源）
 ├── reporter/                # L2：reporter.py（HTTP 批量上报，X-API-Key，错误三分类 AUTH/PAYLOAD/SERVER）
 ├── store/                   # L2：store.py（SQLite WAL：detection_results + report_cursor 游标）
 ├── adapters/                # L3：base.py(Adapter 抽象) + 三协议各一文件
 │                            #    （SSE 流重组 + 非流式解析 + 请求归一化）
 ├── proxy/                   # L4：server.py（ProxyService：catch-all 转发 + 透传 + 限长）
-├── runtime/                 # L5：runtime.py（唯一编排者：start/stop/上报循环/续传/event_sink）
+├── runtime/                 # L5：runtime.py（代理编排）+ core_ops.py（Core 平台任务/文件编排）
 └── cli/                     # L6：main.py(typer app) _common.py(emit/视觉/PID/路径)
-                             #    _serve.py(start 的子进程入口) commands/(15 个命令一文件一命令)
+                             #    _serve.py(start 的子进程入口) commands/(核心命令一文件一命令)
+                             #    commands/core/(status/models/credentials/file/detect/eval/task/skill)
 
 tests/                       # 镜像 src 分层
 ├── test_core|test_recorder|test_reporter|test_store|test_adapters|test_proxy|test_runtime|test_cli/
@@ -45,7 +48,8 @@ docs/
 ├── user-guide.md            # 人类用户手册（命令/配置/排错/安全）
 ├── how-it-works.md          # 实现原理通俗导览（数据流/六层/关键机制/设计取舍）
 ├── design/                  # design.md(总体) architecture.md(六层) data-model.md(SQLite+JSONL)
-├── integration/detector-api.md  # 检测服务器对接契约（含去重实现建议）
+├── integration/detector-api.md  # safe_guard 检测服务器对接契约
+├── integration/core-api.md      # Core 平台直连契约（core 命令：检测/评测/文件/任务）
 └── issues/cli-usage-issues.md   # 历史问题清单
 
 skills/saitec-cli/                 # 教 Agent 操作本 CLI 的 skill（SKILL.md + references + evals；
@@ -54,7 +58,9 @@ skills/saitec-cli/                 # 教 Agent 操作本 CLI 的 skill（SKILL.m
 
 ## 3. 分层原则（维护扩展的铁律）
 
-依赖严格单向：`L6 cli → L5 runtime → L4 proxy / L3 adapters → L2 recorder·reporter·store → L1 core`。只准 import 下层，禁止反向/跨层跳跃。
+依赖严格单向：`L6 cli → L5 runtime → L4 proxy / L3 adapters → L2 recorder·reporter·store·core_api → L1 core`。只准 import 下层，禁止反向/跨层跳跃。
+
+> 既有例外：`report` / `redo` / `core` 命令可直接依赖 L2（store / reporter / core_api）；新增复杂业务仍优先放 L5 `runtime/core_ops.py`。
 
 **新功能落在哪层**：
 
@@ -62,6 +68,7 @@ skills/saitec-cli/                 # 教 Agent 操作本 CLI 的 skill（SKILL.m
 |---|---|
 | 新协议端点 | `adapters/` 新文件（继承 base.Adapter）+ `adapters/__init__.py` 注册 get_adapter + `core/config.py` 的 `_VALID_ENDPOINT_TYPES` |
 | 新 CLI 命令 | `cli/commands/` 新文件 + `cli/main.py` 注册 |
+| 新 Core 平台能力 | `core_api/`（HTTP）+ `runtime/core_ops.py`（编排）+ `cli/commands/core/`（命令）+ `tests/test_core_api|test_runtime/test_core_ops|test_cli/test_core_*` + `docs/integration/core-api.md` |
 | 新配置字段（detector 级） | `core/models.py`(dataclass) + `core/config.py`(解析/校验/`_DETECTOR_ENV_MAP`/`_CLI_FIELD_MAP`) + `cli/commands/config_cmd.py`(`_raw_to_model` + `_env_var_for_field`) + `cli/commands/init.py`(默认写入) —— 四处同步，漏一处即 bug |
 | 新配置字段（service 级） | 同上 + `service_cmd.py` 的 set 选项 |
 | monitor 类实时事件 | `runtime.py` 加 `_emit_event` 事件点 +（流量类）`proxy/server.py` 的 event_sink 透传 |
@@ -90,6 +97,8 @@ skills/saitec-cli/                 # 教 Agent 操作本 CLI 的 skill（SKILL.m
 > **原则**：已修复的 bug 用户不会再遇到，不写排错条目教用户排一个不存在的错。bug 修复记录进 `docs/issues/cli-usage-issues.md` 与 PROGRESS.md 即可；user-guide / SKILL 只在**CLI 操作行为变化**（命令语义、参数、输出、需用户动手的差异）时更新。
 >
 > **CLI help 文本自包含**：`saitec-cli --help` / `saitec-cli <cmd> --help` 是写给"已安装用户"看的，pip 用户拿不到项目内 `docs/` 文件——help 文本**不得引用** `docs/` 路径（包括 `docs/user-guide.md §X`、`docs/integration/detector-api.md` 等）。模块 docstring（源码内注释，不渲染给终端用户）不受此限。
+>
+> **Core 平台能力**：新增/修改 `core` 命令时同步 `docs/integration/core-api.md`（端点、请求字段、任务状态机、错误码），并检查 `skills/saitec-cli/SKILL.md` 的 core 章节与 `references/operations.md` §6。
 
 ## 5. PROGRESS.md 约定
 
@@ -120,8 +129,15 @@ skills/saitec-cli/                 # 教 Agent 操作本 CLI 的 skill（SKILL.m
 "C:/Users/Administrator/anaconda3/envs/saitec-guard/python.exe" -m pytest tests/ -q
 ```
 
+Core 平台相关新增测试：
+
+```bash
+python -m pytest tests/test_core_api tests/test_runtime/test_core_ops.py \
+  tests/test_cli/test_core_payloads.py tests/test_cli/test_core_cmd.py -q
+```
+
 ### CLI 功能自测（Agent 无需人类介入）
-CLI 全命令支持 `--json`（stdout 结构化、stderr 错误、退出码 0/1/2/3/4），用 bash 断言：
+CLI 核心命令与 `core` 叶子命令支持 `--json`（stdout 结构化；`monitor` 例外；应用层错误对象也在 stdout，Click 参数错误在 stderr；退出码 0/1/2/3/4），用 bash 断言：
 
 ```bash
 SG="C:/Users/Administrator/anaconda3/envs/saitec-guard/Scripts/saitec-cli.exe"

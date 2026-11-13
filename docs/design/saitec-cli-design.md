@@ -330,7 +330,12 @@ if errors: exit(1)
 
 ## 13. CLI 命令（草案）
 
-按四类组织：配置 / 生命周期 / 运维 / 调试，共 13 个命令。
+按四类组织：配置 / 生命周期 / 运维 / 调试，早期设计为 13 个命令（当前命令与
+`core` 子命令组以 `saitec-cli --help` 为准）。
+
+> 2026-11 新增 `core` 子命令组（`status/models/credentials/file/detect/eval/task/skill`），
+> 直接调用 Core 平台检测/评测/文件/任务接口。完整命令树见
+> `docs/integration/core-api.md`；下方旧 13 命令清单仅作历史设计参考。
 
 ### 13.0 命令清单
 
@@ -388,7 +393,7 @@ saitec-cli status --json          # 机器可读 JSON
 | 3 | 检测服务器错误（不可达、4xx/5xx） |
 | 4 | 内部错误（未捕获异常） |
 
-**3. `stdout` / `stderr` 分离**：数据 → `stdout`；日志 / 错误 → `stderr`。
+**3. `stdout` / `stderr` 分离**：数据 → `stdout`；日志 / 人类错误 → `stderr`；`--json` 的应用层错误对象仍在 stdout（历史设计说明，以当前 CLI 契约文档为准）。
 
 **非交互模式**：`init` 默认交互，但支持全非交互参数（Agent 友好）：
 
@@ -409,6 +414,10 @@ saitec-cli init --api-key "$API_KEY" --detector-url "http://detector:8080" --con
 ## 15. 配置管理（config 子命令与环境变量）
 
 本节详细描述 `config` 子命令与配置三级覆盖矩阵（与 §12.1 互为补充）。
+
+> `detector.url` + `detector.api_key` 是**平台连接**：safe_guard 上报与
+> `saitec-cli core ...` 共用，不新增第二套 core 配置。`init --no-service`
+> 可生成 `services: []` 的平台专用配置。
 
 ### 15.1 `config` 子命令
 

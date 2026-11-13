@@ -20,6 +20,7 @@ import typer
 
 from .._common import (
     EXIT_RUNTIME_ERROR,
+    EXIT_USER_ERROR,
     FAIL,
     RADAR,
     WARN,
@@ -213,6 +214,18 @@ def monitor_cmd(
         emit(json_output=False, ok=False,
              error={"code": "CONFIG_VALIDATION_ERROR", "message": "配置校验失败（不启动）"},
              exit_code=EXIT_RUNTIME_ERROR)
+        return
+
+    if not config.services:
+        emit(json_output=False, ok=False,
+             error={
+                 "code": "NO_SERVICES",
+                 "message": (
+                     "配置中没有监控服务：用 `saitec-cli service add <name> --upstream <URL>` 添加；"
+                     "仅使用 `saitec-cli core ...` 平台命令时不需要 monitor"
+                 ),
+             },
+             exit_code=EXIT_USER_ERROR)
         return
 
     # 互斥：与 start/restart 共用 PID 检查

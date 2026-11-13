@@ -36,6 +36,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     （server.py import 时读取），测试需要确定性的 random 行为，不受用户本地 .env 影响。
     """
     monkeypatch.setattr(mock_server, "DETECTION_MODE", "random")
+    monkeypatch.setattr(mock_server, "VIOLATION_RATE", 0.05)
+    monkeypatch.setattr(mock_server, "LATENCY_MS", 0)
+    monkeypatch.setattr(mock_server, "API_KEY", "mock-test-key")
     mock_server._records = []  # noqa: SLF001  （重启清空，等价于新起实例）
     with TestClient(mock_server.app) as c:
         yield c
@@ -186,7 +189,8 @@ def client_with_records(client: TestClient) -> TestClient:
             "status_code": 200, "request": {}, "response": {},
         }]}
 
-    with mock.patch.object(mock_server, "VIOLATION_RATE", 1.0):
+    with mock.patch.object(mock_server, "VIOLATION_RATE", 1.0), \
+         mock.patch.object(mock_server.random, "choice", return_value="high"):
         for i in range(5):
             client.post(
                 "/detect", json=_single(f"v{i}", "svc-a"),

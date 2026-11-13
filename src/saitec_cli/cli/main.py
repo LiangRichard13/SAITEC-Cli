@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from .commands import config_cmd, doctor, export, init, logs, monitor, purge, redo, report, restart, service_cmd, start, status, stop, tail, validate
+from .commands import config_cmd, core, doctor, export, init, logs, monitor, purge, redo, report, restart, service_cmd, start, status, stop, tail, validate
 
 
 def _configure_io_encoding() -> None:
@@ -38,6 +38,8 @@ try:
     import typer.rich_utils as _rich_utils  # type: ignore[import-untyped]
     _rich_utils.STYLE_HELPTEXT = "white"
     _rich_utils.STYLE_HELPTEXT_FIRST_LINE = "white bold"
+    # core 命令有较多长选项；固定 120 列避免 --help 中选项名被截断成 "--judge-caller-…"
+    _rich_utils.MAX_WIDTH = 120
 except (ImportError, AttributeError):
     pass  # typer 老版本不暴露这些常量，忽略
 
@@ -105,6 +107,9 @@ app.add_typer(config_cmd.app, name="config")
 
 # service 子命令组（add / remove / set / list）
 app.add_typer(service_cmd.app, name="service")
+
+# core 子命令组（status / models / credentials / file / detect / eval / task / skill）
+app.add_typer(core.app, name="core")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from typing import Any
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from ..core.models import AppConfig, ConfigError
 from ..core.paths import resolve_config_dir, resolve_config_path
@@ -102,7 +103,7 @@ def emit(
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         if error is not None:
-            err_console.print(f"{FAIL} 错误: {error.get('message', '')}")
+            err_console.print(f"{FAIL} 错误: {escape(str(error.get('message', '')))}")
         elif data is not None:
             _render_human(data)
 
@@ -115,15 +116,16 @@ def _render_human(data: Any) -> None:
     if isinstance(data, dict):
         for k, v in data.items():
             if isinstance(v, (dict, list)):
-                console.print(f"[dim]{k}:[/dim] {json.dumps(v, ensure_ascii=False)}")
+                rendered = json.dumps(v, ensure_ascii=False)
+                console.print(f"[dim]{k}:[/dim] {escape(rendered)}")
             else:
-                console.print(f"[dim]{k}:[/dim] {v}")
+                console.print(f"[dim]{k}:[/dim] {escape(str(v))}")
     elif isinstance(data, list):
         for item in data:
             if isinstance(item, dict):
-                console.print(json.dumps(item, ensure_ascii=False))
+                console.print(json.dumps(item, ensure_ascii=False), markup=False)
             else:
-                console.print(item)
+                console.print(escape(str(item)))
     elif isinstance(data, str):
         # 字符串原样打印（可含 rich markup，如 format_services_block 的成品块）
         console.print(data)

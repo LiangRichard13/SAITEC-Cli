@@ -34,7 +34,7 @@ _VALID_ENDPOINT_TYPES = (
 def _build_default_config(
     detector_url: str,
     api_key: str,
-    service: dict,
+    service: dict | None,
     endpoint_path: str = "/detect",
 ) -> dict:
     return {
@@ -48,7 +48,7 @@ def _build_default_config(
             "max_queue_size": 10000,
             "timeout_sec": 30,
         },
-        "services": [service],
+        "services": [service] if service else [],
         "log_level": "INFO",
     }
 
@@ -105,8 +105,8 @@ def init_cmd(
     name: str | None = typer.Option(
         None, "--name", help="服务名（缺省用 endpoint_type）"
     ),
-    port: int = typer.Option(
-        9001, "--port", "-p", help="本地监听端口（默认 9001）"
+    port: int | None = typer.Option(
+        None, "--port", "-p", help="本地监听端口（默认 9001）"
     ),
     endpoint_path: str = typer.Option(
         "/detect",
@@ -116,6 +116,11 @@ def init_cmd(
     config_path: Path | None = typer.Option(None, "--config", "-c"),
     json_output: bool = typer.Option(False, "--json"),
     force: bool = typer.Option(False, "--force", help="覆盖已存在的 config.json"),
+    no_service: bool = typer.Option(
+        False,
+        "--no-service",
+        help="只配置平台连接，不创建监控服务（仅使用 core 命令时）",
+    ),
 ) -> None:
     """🎯 生成 config.json（单服务起步）
 
@@ -123,14 +128,15 @@ def init_cmd(
     生成单服务配置；要监控更多端点用 `saitec-cli service add`。
 
     校验：api_key ≥ 8 字符；detector-url 与 upstream 必须以 http/https 开头；
-    endpoint-path 必须以 / 开头；非 TTY 且未给 `--upstream` 时报错
-    （upstream 必须显式指定）。
+    endpoint-path 必须以 / 开头；非 TTY 且未给 `--upstream`（且未用
+    `--no-service`）时报错。
 
     \b
     Examples:
       saitec-cli init --api-key KEY --detector-url http://detector:8080 --upstream https://api.deepseek.com
       saitec-cli init --api-key KEY --detector-url URL --upstream http://localhost:23333 --port 9010
       saitec-cli init --api-key KEY --detector-url http://core:8080 --upstream URL --endpoint-path /api/v1/cli/safe-guard/detect
+      saitec-cli init --api-key KEY --detector-url http://core:8080 --no-service  # 只用 core 命令
       saitec-cli init --api-key KEY --detector-url URL --upstream URL --force  # 覆盖已有
 
     \b
@@ -165,7 +171,20 @@ def init_cmd(
     if api_key is None:
         api_key = _prompt("X-API-Key")
     # 3. upstream：--upstream > 交互（TTY）> 报错（非 TTY）
-    if upstream is None:
+    # --no-service：只配置平台连接，不创建监控服务
+    if no_service:
+        if upstream or endpoint_type or name or port is not None:
+            emit(
+                json_output=json_output,
+                ok=False,
+                error={
+                    "code": "INVALID_OPTION",
+                    "message": "--no-service 不能与 --upstream/--endpoint-type/--name/--port 同时使用",
+                },
+                exit_code=EXIT_USER_ERROR,
+            )
+            return
+    elif upstream is None:
         upstream = _prompt(
             "要监控的上游 base URL (upstream)\n"
             "  例: https://api.openai.com / https://api.deepseek.com/anthropic / http://localhost:23333"
@@ -183,7 +202,7 @@ def init_cmd(
         )
         return
 
-    if not upstream:
+    if not upstream and not no_service:
         emit(
             json_output=json_output,
             ok=False,
@@ -208,7 +227,7 @@ def init_cmd(
             exit_code=EXIT_USER_ERROR,
         )
         return
-    if not upstream.startswith(("http://", "https://")):
+    if not no_service and not upstream.startswith(("http://", "https://")):
         emit(
             json_output=json_output,
             ok=False,
@@ -233,22 +252,23 @@ def init_cmd(
         return
     api_key = api_key_stripped
 
-    # endpoint_type：显式 > URL 启发式
+    # endpoint_type：显式 > URL 启发式（--no-service 时跳过）
     guessed = False
-    if endpoint_type is None:
-        endpoint_type = guess_endpoint_type(upstream)
-        guessed = True
-    if endpoint_type not in _VALID_ENDPOINT_TYPES:
-        emit(
-            json_output=json_output,
-            ok=False,
-            error={
-                "code": "INVALID_ENDPOINT_TYPE",
-                "message": f"endpoint_type 必须是 {' / '.join(_VALID_ENDPOINT_TYPES)}，got {endpoint_type!r}",
-            },
-            exit_code=EXIT_USER_ERROR,
-        )
-        return
+    if not no_service:
+        if endpoint_type is None:
+            endpoint_type = guess_endpoint_type(upstream)
+            guessed = True
+        if endpoint_type not in _VALID_ENDPOINT_TYPES:
+            emit(
+                json_output=json_output,
+                ok=False,
+                error={
+                    "code": "INVALID_ENDPOINT_TYPE",
+                    "message": f"endpoint_type 必须是 {' / '.join(_VALID_ENDPOINT_TYPES)}，got {endpoint_type!r}",
+                },
+                exit_code=EXIT_USER_ERROR,
+            )
+            return
 
     endpoint_path = endpoint_path.strip()
     if not endpoint_path.startswith("/"):
@@ -263,13 +283,15 @@ def init_cmd(
         )
         return
 
-    service = {
-        "name": name or endpoint_type,
-        "port": port,
-        "upstream": upstream,
-        "endpoint_type": endpoint_type,
-        "record_body": True,
-    }
+    service = None
+    if not no_service:
+        service = {
+            "name": name or endpoint_type,
+            "port": 9001 if port is None else port,
+            "upstream": upstream,
+            "endpoint_type": endpoint_type,
+            "record_body": True,
+        }
     config = _build_default_config(detector_url, api_key, service, endpoint_path)
 
     try:
@@ -286,12 +308,14 @@ def init_cmd(
         return
 
     warnings: list[str] = []
-    w = upstream_endpoint_warning(upstream)
-    if w:
-        warnings.append(w)
-        if not json_output:
-            err_console.print(f"{WARN} {w}")
+    if not no_service:
+        w = upstream_endpoint_warning(upstream)
+        if w:
+            warnings.append(w)
+            if not json_output:
+                err_console.print(f"{WARN} {w}")
 
+    services = [service] if service else []
     if json_output:
         emit(
             json_output=True,
@@ -299,27 +323,39 @@ def init_cmd(
                 "config_path": str(path),
                 "detector_url": detector_url,
                 "endpoint_path": endpoint_path,
-                "services": [service],
+                "services": services,
                 "endpoint_type_guessed": guessed,
                 "warnings": warnings,
                 "created_at": now_iso8601(),
-                "next_steps": [
-                    "监控更多端点: saitec-cli service add <name> --upstream <URL>",
-                    "启动服务: saitec-cli start",
-                ],
+                "next_steps": (
+                    ["使用平台命令: saitec-cli core status"]
+                    if no_service
+                    else [
+                        "监控更多端点: saitec-cli service add <name> --upstream <URL>",
+                        "启动服务: saitec-cli start",
+                    ]
+                ),
             },
         )
     else:
         console.print(f"{OK} 配置已生成  [dim]{path}[/dim]")
-        console.print(f"[dim]检测服务器:[/dim] {detector_url}")
+        console.print(f"[dim]平台地址:[/dim] {detector_url}")
         console.print(f"[dim]生成时间:[/dim] {now_iso8601()}")
         if guessed:
             console.print(f"[dim]协议格式:[/dim] [cyan]{endpoint_type}[/cyan] [dim]（按 upstream URL 猜测，可用 --endpoint-type 显式指定）[/dim]")
         console.print()
-        console.print(format_services_block([service]))
+        if no_service:
+            console.print(
+                "[dim]平台模式：未创建监控服务（core 命令可用；需要代理时再 service add）[/dim]"
+            )
+        else:
+            console.print(format_services_block(services))
         console.print()
         console.print("[dim]下一步:[/dim]")
-        console.print(f"  - 监控更多端点: [cyan]saitec-cli service add <name> --upstream <URL>[/cyan]")
-        console.print(f"  - 启动服务:     [cyan]saitec-cli start[/cyan]")
+        if no_service:
+            console.print(f"  - 验证平台连接: [cyan]saitec-cli core status[/cyan]")
+        else:
+            console.print(f"  - 监控更多端点: [cyan]saitec-cli service add <name> --upstream <URL>[/cyan]")
+            console.print(f"  - 启动服务:     [cyan]saitec-cli start[/cyan]")
         if os.name == "nt":
             err_console.print(f"{WARN} 建议在 Windows 上用 icacls 限制 config.json 权限")
