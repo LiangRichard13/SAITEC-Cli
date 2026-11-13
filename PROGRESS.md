@@ -7,7 +7,7 @@
 
 ## 2026-11-12
 
-### feat: core 子命令直连 Core 平台（检测/评测/文件/任务） （待提交）
+### feat: core 子命令直连 Core 平台（检测/评测/文件/任务） <9c146c0>
 新增 `saitec-cli core` 命令组，直接调用 Core `/api/v1/skills/*`、`/api/v1/tasks*`、
 `/api/v1/tested-models` 与 file-manage 接口，覆盖 MCP 的检测/评测/文件/任务/模型/
 凭证能力；连接复用 `detector.url` + `detector.api_key`，不引入第二套 base_url/Key。
@@ -16,13 +16,11 @@ L5 `runtime/core_ops.py`（任务等待/取消/产物、上传→检测/评测�
 L6 `cli/commands/core/`（status/models/credentials/file/detect/eval/task/skill）。
 评测请求全部字段展开为 flags；`judge_callers` 用可重复 `--judge-caller-json`。
 `init --no-service` 支持只配置平台连接；`config set detector.api_key` 输出改为脱敏。
-经 4 个子代理两轮审查，修复下载路径/中文 filename*、网络错误分类、rich markup、restart/monitor 空 services、dataset/judge/shape 校验等；验证：全量 pytest 390 passed（新增 122）；真实 Key 只读 E2E 通过（status/models/
-task list/get/wait/cancel/artifacts/file list/read/download），文件上传→列表→读取→
-下载→REST 删除 round-trip 字节一致；未创建检测/评测任务。
+经 4 个子代理两轮审查，修复下载路径/中文 filename*、网络错误分类、rich markup、restart/monitor 空 services、dataset/judge/shape 校验等；验证：全量 pytest 396 passed（新增 128；含 `tests/test_cli/test_core_detection_e2e.py` 的本地 mock Core 全链路六类检测创建→取消）；真实 Key E2E：查询/文件 round-trip 通过，并按类型逐一创建→取消 9 类任务（文本/批量文本/图像/批量图像/视频/批量视频/安全评测/通用评测/语料安全评测），7 个运行中任务取消成功，2 个文本任务秒级完成（取消返回 `not_running`），无 running 残留。
 教训: Core 业务失败大量是 HTTP 200 + `success=false`，只看状态码会把"任务/文件不存在"
 当成功；任务取消是 `failed + "Cancelled by user"`，不是独立状态。
 
-### docs: Core API 契约 + skill/用户文档同步 （待提交）
+### docs: Core API 契约 + skill/用户文档同步 <9c146c0>
 新增 `docs/integration/core-api.md`（端点/任务状态机/文件/评测字段/错误码/示例）；
 SKILL.md 增 core 命令速查与 3 个 recipe；references/operations.md 增 §6；
 README/user-guide/AGENTS/设计文档/PROGRESS 同步。真实 E2E 输出均用 `--json` 保存到

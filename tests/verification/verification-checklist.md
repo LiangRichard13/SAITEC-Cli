@@ -172,13 +172,42 @@ saitec-cli stop --json        # 应成功停止
 - [ ] 隔离目录下的 config.json 正确创建
 - [ ] start/stop 在隔离目录下正常工作（PID/log 文件在隔离目录）
 
+### B6. Core 检测命令（CLI 直连）
+
+> 前置：Core 已在 `detector.url` 运行且 `detector.api_key` 有权限；本节只做检测任务，
+> 不创建评测任务。自动化回归：`pytest tests/test_cli/test_core_detection_e2e.py -q`
+> （本地 mock Core，覆盖六类检测的创建 → 取消）。
+
+真实 Core 手工矩阵（逐一执行，创建后立即取消，避免任务并发）：
+
+| # | 命令 | 预期 task_type | 取消预期 |
+|---|------|----------------|----------|
+| 27 | `saitec-cli core detect text --text "..." --json` | `text_detect` | 秒级完成时 `not_running` |
+| 28 | `saitec-cli core detect text-batch --items items.json --json` | `text_detect` | 秒级完成时 `not_running` |
+| 29 | `saitec-cli core detect image --file a.png --json` | `image_detect` | `cancelled=true` |
+| 30 | `saitec-cli core detect image-batch --files a.png --files b.jpg --json` | `image_detect` | `cancelled=true` |
+| 31 | `saitec-cli core detect video --file a.mp4 --json` | `video_detect` | `cancelled=true` |
+| 32 | `saitec-cli core detect video-batch --files a.mp4 --files b.mp4 --json` | `video_detect` | `cancelled=true` |
+
+**检查项**：
+- [ ] 提交返回 `local_task_id` + `status=running`，退出码 0
+- [ ] `core task list --json` 能看到新任务，`task_type` 与上表一致
+- [ ] 图像/视频 `--file/--files` 先上传再提交，`image_uri`/`video_uri` 使用上传返回的 `storage_uri`
+- [ ] 取消返回 `cancelled=true`，随后详情为 `failed` + `error_message="Cancelled by user"`
+- [ ] 已完成任务取消返回 `cancelled=false, reason=not_running`，不改写终态
+- [ ] 全部执行完后 `core task list` 无 `running/pending` 残留
+- [ ] `--json` 输出中不出现 API Key 明文
+
+> 图像/视频的 Core 请求没有 `task_name` 字段，CLI 不提供 `--task-name`；误加时 Click 返回
+> exit 2，且不会创建任务，这是预期行为。
+
 ---
 
 ## 三、执行顺序
 
 1. **先深度**（D1→D6）：确保核心数据链路语义正确
-2. **后广度**（B1→B5）：确保所有命令可用
-3. **最终**：全量 pytest 250+ 绿
+2. **后广度**（B1→B6）：确保所有命令可用
+3. **最终**：全量 pytest 全绿（当前 396）
 
 预计耗时：深度 ~15min（含上报等待），广度 ~10min。
 
