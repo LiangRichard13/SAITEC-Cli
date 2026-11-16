@@ -7,7 +7,7 @@
 
 ## 2026-11-16
 
-### fix(core): 对齐 CZY live 评测/检测契约 （待提交）
+### fix(core): 对齐 CZY live 评测/检测契约 <9d89e3e>
 `core eval` / `core detect` 与下游 live 评测引擎（18080–18083）收敛：
 - 评测：`evaluation_mode` 改 5 值枚举；`judge_rounds`/`judge_max_retry`/
   threshold 加范围；`resume_from_task_id` + `resume_from_run_tag` 强制成对；
