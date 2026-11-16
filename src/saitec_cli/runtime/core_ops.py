@@ -174,7 +174,7 @@ class CoreOps:
         path: Path | str,
         *,
         file_format: str | None = None,
-        data_format: str = "case_list",
+        data_format: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """上传 dataset 并构造 Core DatasetConfig；返回 (upload, dataset)。"""
         resolved_format = self._validate_dataset_format(
@@ -193,9 +193,12 @@ class CoreOps:
 
     @staticmethod
     def _validate_dataset_format(
-        path: Path | str, file_format: str | None, data_format: str
+        path: Path | str, file_format: str | None, data_format: str | None
     ) -> str:
-        if data_format not in ("prompt_list", "case_list"):
+        if data_format is not None and data_format not in (
+            "prompt_list",
+            "case_list",
+        ):
             raise ValueError(
                 f"dataset-data-format 必须是 prompt_list/case_list，当前为 {data_format!r}"
             )
@@ -218,7 +221,7 @@ class CoreOps:
         upload: dict[str, Any],
         *,
         file_format: str | None = None,
-        data_format: str = "case_list",
+        data_format: str | None = None,
     ) -> dict[str, Any]:
         storage_uri = upload.get("storage_uri")
         if not isinstance(storage_uri, str) or not storage_uri:
@@ -227,7 +230,10 @@ class CoreOps:
                 "上传接口未返回 storage_uri",
                 detail=upload,
             )
-        if data_format not in ("prompt_list", "case_list"):
+        if data_format is not None and data_format not in (
+            "prompt_list",
+            "case_list",
+        ):
             raise ValueError(
                 f"dataset-data-format 必须是 prompt_list/case_list，当前为 {data_format!r}"
             )
@@ -243,12 +249,14 @@ class CoreOps:
             raise ValueError(
                 f"dataset-file-format 必须是 json/jsonl，当前为 {file_format!r}"
             )
-        return {
+        dataset = {
             "source_type": "server_path",
             "path": storage_uri,
             "file_format": file_format,
-            "data_format": data_format,
         }
+        if data_format is not None:
+            dataset["data_format"] = data_format
+        return dataset
 
     # ---- 任务 ----
 

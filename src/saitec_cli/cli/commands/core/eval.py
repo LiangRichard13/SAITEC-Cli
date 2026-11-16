@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import typer
 
@@ -29,6 +30,14 @@ from ._shared import (
 
 app = typer.Typer(help="LLM 评测（safety/general/corpus）")
 
+EvaluationModeArg = Literal[
+    "standard",
+    "social_ideology_long_answer",
+    "social_ideology_long_answer_v2",
+    "social_ideology_refusal_qa",
+    "social_ideology_generation_dual",
+]
+
 
 async def _resolve_dataset(
     ops,
@@ -37,7 +46,7 @@ async def _resolve_dataset(
     dataset_path: str | None,
     source_type: str,
     file_format: str | None,
-    data_format: str,
+    data_format: str | None,
 ) -> dict | None:
     if dataset_file and dataset_path:
         raise ValueError("--dataset-file 与 --dataset-path 只能二选一")
@@ -56,15 +65,23 @@ async def _resolve_dataset(
     )
 
 
-def _reject_siliconflow_judge(adapter_type: str | None) -> None:
-    if adapter_type == "siliconflow_image_generation":
-        raise ValueError("judge_caller 不支持 siliconflow_image_generation")
+_IMAGE_CALLER_ADAPTERS = {
+    "siliconflow_image_generation",
+    "dashscope_image_generation",
+}
 
 
-def _reject_siliconflow_caller(adapter_type: str | None, skill: str) -> None:
-    if adapter_type == "siliconflow_image_generation":
+def _reject_image_judge(adapter_type: str | None) -> None:
+    if adapter_type in _IMAGE_CALLER_ADAPTERS:
         raise ValueError(
-            f"{skill} caller 不支持 siliconflow_image_generation；仅 general 支持"
+            "judge_caller 不支持图像生成 adapter；仅 registry/openai/echo"
+        )
+
+
+def _reject_image_caller(adapter_type: str | None, skill: str) -> None:
+    if adapter_type in _IMAGE_CALLER_ADAPTERS:
+        raise ValueError(
+            f"{skill} caller 不支持图像生成 adapter；仅 general 支持"
         )
 
 
@@ -84,17 +101,25 @@ def eval_safety_cmd(
     dataset_path: str | None = typer.Option(None, "--dataset-path", help="已上传 dataset 的 storage_uri"),
     dataset_source_type: str = typer.Option("server_path", "--dataset-source-type"),
     dataset_file_format: str | None = typer.Option(None, "--dataset-file-format", help="json/jsonl（缺省按扩展名）"),
-    dataset_data_format: str = typer.Option("case_list", "--dataset-data-format", help="prompt_list/case_list"),
+    dataset_data_format: str | None = typer.Option(None, "--dataset-data-format", help="prompt_list/case_list；缺省由下游按数据自动识别"),
     caller_adapter_type: str | None = typer.Option(None, "--caller-adapter-type"),
+    caller_adapter_name: str | None = typer.Option(None, "--caller-adapter-name"),
     caller_model: str | None = typer.Option(None, "--caller-model"),
     caller_api_key_env: str | None = typer.Option(None, "--caller-api-key-env"),
     caller_base_url: str | None = typer.Option(None, "--caller-base-url"),
     caller_timeout_seconds: int | None = typer.Option(None, "--caller-timeout-seconds"),
+    caller_provider_block_response_text: str | None = typer.Option(
+        None, "--caller-provider-block-response-text"
+    ),
     judge_caller_adapter_type: str | None = typer.Option(None, "--judge-caller-adapter-type"),
+    judge_caller_adapter_name: str | None = typer.Option(None, "--judge-caller-adapter-name"),
     judge_caller_model: str | None = typer.Option(None, "--judge-caller-model"),
     judge_caller_api_key_env: str | None = typer.Option(None, "--judge-caller-api-key-env"),
     judge_caller_base_url: str | None = typer.Option(None, "--judge-caller-base-url"),
     judge_caller_timeout_seconds: int | None = typer.Option(None, "--judge-caller-timeout-seconds"),
+    judge_caller_provider_block_response_text: str | None = typer.Option(
+        None, "--judge-caller-provider-block-response-text"
+    ),
     attack_names: list[str] = typer.Option([], "--attack-name", help="攻击变体名，可重复"),
     safety_rules_text: str | None = typer.Option(None, "--safety-rules-text"),
     safety_rules_file: Path | None = typer.Option(None, "--safety-rules-file"),
@@ -119,21 +144,25 @@ def eval_safety_cmd(
         )
         if not prompt_list and dataset is None:
             raise ValueError("需要 --prompt/--prompts-file 或 dataset")
-        _reject_siliconflow_caller(caller_adapter_type, "safety")
+        _reject_image_caller(caller_adapter_type, "safety")
         caller = build_caller(
             adapter_type=caller_adapter_type,
+            adapter_name=caller_adapter_name,
             model=caller_model,
             api_key_env=caller_api_key_env,
             base_url=caller_base_url,
             timeout_seconds=caller_timeout_seconds,
+            provider_block_response_text=caller_provider_block_response_text,
         )
-        _reject_siliconflow_judge(judge_caller_adapter_type)
+        _reject_image_judge(judge_caller_adapter_type)
         judge_caller = build_caller(
             adapter_type=judge_caller_adapter_type,
+            adapter_name=judge_caller_adapter_name,
             model=judge_caller_model,
             api_key_env=judge_caller_api_key_env,
             base_url=judge_caller_base_url,
             timeout_seconds=judge_caller_timeout_seconds,
+            provider_block_response_text=judge_caller_provider_block_response_text,
         )
         rules = read_text_or_file(
             safety_rules_text, safety_rules_file, "safety-rules-text"
@@ -175,12 +204,16 @@ def eval_general_cmd(
     dataset_path: str | None = typer.Option(None, "--dataset-path"),
     dataset_source_type: str = typer.Option("server_path", "--dataset-source-type"),
     dataset_file_format: str | None = typer.Option(None, "--dataset-file-format"),
-    dataset_data_format: str = typer.Option("case_list", "--dataset-data-format"),
+    dataset_data_format: str | None = typer.Option(None, "--dataset-data-format", help="prompt_list/case_list；缺省由下游按数据自动识别"),
     caller_adapter_type: str | None = typer.Option(None, "--caller-adapter-type"),
+    caller_adapter_name: str | None = typer.Option(None, "--caller-adapter-name"),
     caller_model: str | None = typer.Option(None, "--caller-model"),
     caller_api_key_env: str | None = typer.Option(None, "--caller-api-key-env"),
     caller_base_url: str | None = typer.Option(None, "--caller-base-url"),
     caller_timeout_seconds: int | None = typer.Option(None, "--caller-timeout-seconds"),
+    caller_provider_block_response_text: str | None = typer.Option(
+        None, "--caller-provider-block-response-text"
+    ),
     caller_image_size: str | None = typer.Option(None, "--caller-image-size"),
     caller_batch_size: int | None = typer.Option(None, "--caller-batch-size"),
     caller_num_inference_steps: int | None = typer.Option(None, "--caller-num-inference-steps"),
@@ -189,33 +222,27 @@ def eval_general_cmd(
     caller_seed: int | None = typer.Option(None, "--caller-seed"),
     caller_output_dir: str | None = typer.Option(None, "--caller-output-dir"),
     judge_caller_adapter_type: str | None = typer.Option(None, "--judge-caller-adapter-type"),
+    judge_caller_adapter_name: str | None = typer.Option(None, "--judge-caller-adapter-name"),
     judge_caller_model: str | None = typer.Option(None, "--judge-caller-model"),
     judge_caller_api_key_env: str | None = typer.Option(None, "--judge-caller-api-key-env"),
     judge_caller_base_url: str | None = typer.Option(None, "--judge-caller-base-url"),
     judge_caller_timeout_seconds: int | None = typer.Option(None, "--judge-caller-timeout-seconds"),
+    judge_caller_provider_block_response_text: str | None = typer.Option(
+        None, "--judge-caller-provider-block-response-text"
+    ),
     judge_caller_json: list[str] = typer.Option([], "--judge-caller-json", help="judge_callers JSON object，可重复"),
-    judge_rounds: int | None = typer.Option(None, "--judge-rounds"),
+    judge_rounds: int | None = typer.Option(None, "--judge-rounds", min=1, max=10),
     dimensions: list[str] = typer.Option([], "--dimension", help="评测维度，可重复"),
-    evaluation_mode: str | None = typer.Option(None, "--evaluation-mode"),
-    pass_threshold: float | None = typer.Option(None, "--pass-threshold"),
-    partial_threshold: float | None = typer.Option(None, "--partial-threshold"),
+    evaluation_mode: EvaluationModeArg | None = typer.Option(
+        None, "--evaluation-mode", help="评测模式"
+    ),
+    pass_threshold: float | None = typer.Option(None, "--pass-threshold", min=0.0, max=1.0),
+    partial_threshold: float | None = typer.Option(None, "--partial-threshold", min=0.0, max=1.0),
     evaluation_rubric_text: str | None = typer.Option(None, "--evaluation-rubric-text"),
     evaluation_rubric_file: Path | None = typer.Option(None, "--evaluation-rubric-file"),
-    judge_max_retry: int | None = typer.Option(None, "--judge-max-retry"),
-    provider_block_response_text: bool = typer.Option(
-        False,
-        "--provider-block-response-text",
-        help="显式设为 true（与 --no-provider-block-response-text 二选一）",
-    ),
-    no_provider_block_response_text: bool = typer.Option(
-        False,
-        "--no-provider-block-response-text",
-        help="显式设为 false（与 --provider-block-response-text 二选一）",
-    ),
-    result_adapter: str | None = typer.Option(None, "--result-adapter"),
-    adapter_name: str | None = typer.Option(None, "--adapter-name"),
+    judge_max_retry: int | None = typer.Option(None, "--judge-max-retry", min=0, max=10),
     resume_from_task_id: str | None = typer.Option(None, "--resume-from-task-id"),
-    run_tag: str | None = typer.Option(None, "--run-tag"),
+    resume_from_run_tag: str | None = typer.Option(None, "--resume-from-run-tag"),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
     timeout: float = typer.Option(3600.0, "--timeout", min=0.1),
@@ -238,10 +265,12 @@ def eval_general_cmd(
             raise ValueError("需要 --prompt/--prompts-file 或 dataset")
         caller = build_caller(
             adapter_type=caller_adapter_type,
+            adapter_name=caller_adapter_name,
             model=caller_model,
             api_key_env=caller_api_key_env,
             base_url=caller_base_url,
             timeout_seconds=caller_timeout_seconds,
+            provider_block_response_text=caller_provider_block_response_text,
             image_size=caller_image_size,
             batch_size=caller_batch_size,
             num_inference_steps=caller_num_inference_steps,
@@ -250,13 +279,15 @@ def eval_general_cmd(
             seed=caller_seed,
             output_dir=caller_output_dir,
         )
-        _reject_siliconflow_judge(judge_caller_adapter_type)
+        _reject_image_judge(judge_caller_adapter_type)
         judge_caller = build_caller(
             adapter_type=judge_caller_adapter_type,
+            adapter_name=judge_caller_adapter_name,
             model=judge_caller_model,
             api_key_env=judge_caller_api_key_env,
             base_url=judge_caller_base_url,
             timeout_seconds=judge_caller_timeout_seconds,
+            provider_block_response_text=judge_caller_provider_block_response_text,
         )
         judge_callers = parse_judge_callers(judge_caller_json)
         rubric = read_text_or_file(
@@ -264,15 +295,6 @@ def eval_general_cmd(
             evaluation_rubric_file,
             "evaluation-rubric-text",
         )
-        if provider_block_response_text and no_provider_block_response_text:
-            raise ValueError(
-                "--provider-block-response-text 与 --no-provider-block-response-text 只能二选一"
-            )
-        provider_value: bool | None = None
-        if provider_block_response_text:
-            provider_value = True
-        elif no_provider_block_response_text:
-            provider_value = False
         payload = build_general_payload(
             task_name=task_name,
             model_name=model_name,
@@ -289,11 +311,8 @@ def eval_general_cmd(
             partial_threshold=partial_threshold,
             evaluation_rubric_text=rubric,
             judge_max_retry=judge_max_retry,
-            provider_block_response_text=provider_value,
-            result_adapter=result_adapter,
-            adapter_name=adapter_name,
             resume_from_task_id=resume_from_task_id,
-            run_tag=run_tag,
+            resume_from_run_tag=resume_from_run_tag,
         )
         data = await ops.submit_eval("general-eval", payload)
         return await submit_and_maybe_wait(
@@ -318,13 +337,17 @@ def eval_corpus_cmd(
     dataset_path: str | None = typer.Option(None, "--dataset-path"),
     dataset_source_type: str = typer.Option("server_path", "--dataset-source-type"),
     dataset_file_format: str | None = typer.Option(None, "--dataset-file-format"),
-    dataset_data_format: str = typer.Option("case_list", "--dataset-data-format"),
+    dataset_data_format: str | None = typer.Option(None, "--dataset-data-format", help="prompt_list/case_list；缺省由下游按数据自动识别"),
     judge_model_name: str | None = typer.Option(None, "--judge-model-name"),
     judge_caller_adapter_type: str | None = typer.Option(None, "--judge-caller-adapter-type"),
+    judge_caller_adapter_name: str | None = typer.Option(None, "--judge-caller-adapter-name"),
     judge_caller_model: str | None = typer.Option(None, "--judge-caller-model"),
     judge_caller_api_key_env: str | None = typer.Option(None, "--judge-caller-api-key-env"),
     judge_caller_base_url: str | None = typer.Option(None, "--judge-caller-base-url"),
     judge_caller_timeout_seconds: int | None = typer.Option(None, "--judge-caller-timeout-seconds"),
+    judge_caller_provider_block_response_text: str | None = typer.Option(
+        None, "--judge-caller-provider-block-response-text"
+    ),
     chunking_enabled: bool | None = typer.Option(
         None, "--chunking-enabled/--no-chunking-enabled"
     ),
@@ -352,13 +375,15 @@ def eval_corpus_cmd(
         )
         if not text_list and dataset is None:
             raise ValueError("需要 --text/--texts-file 或 dataset")
-        _reject_siliconflow_judge(judge_caller_adapter_type)
+        _reject_image_judge(judge_caller_adapter_type)
         judge_caller = build_caller(
             adapter_type=judge_caller_adapter_type,
+            adapter_name=judge_caller_adapter_name,
             model=judge_caller_model,
             api_key_env=judge_caller_api_key_env,
             base_url=judge_caller_base_url,
             timeout_seconds=judge_caller_timeout_seconds,
+            provider_block_response_text=judge_caller_provider_block_response_text,
         )
         chunking = build_chunking(
             enabled=chunking_enabled,

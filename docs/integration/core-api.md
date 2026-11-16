@@ -168,9 +168,9 @@ saitec-cli core file read FILE_ID
 saitec-cli core detect text --text/--text-file ... [--method --threshold --language --task-name] [--wait]
 saitec-cli core detect text-batch --items/--dataset-file/--dataset-path ... [--wait]
 saitec-cli core detect image --file/--image-uri ... [--method --threshold --return-visuals] [--wait]
-saitec-cli core detect image-batch --items/--files ... [--method] [--wait]
+saitec-cli core detect image-batch --items/--files ... [--method --threshold --return-visuals] [--wait]
 saitec-cli core detect video --file/--video-uri ... [--method --threshold] [--wait]
-saitec-cli core detect video-batch --items/--files ... [--wait]
+saitec-cli core detect video-batch --items/--files ... [--method --threshold] [--wait]
 
 saitec-cli core eval safety [全部参数] [--wait]
 saitec-cli core eval general [全部参数] [--wait]
@@ -189,6 +189,17 @@ saitec-cli core skill list/get/search [--dir PATH]
 
 `pipeline_tier` 由服务端按订阅强制注入，CLI 不暴露、不发送。
 
+### 检测 method 枚举
+
+- 文本：`sample` / `radar` / `chinese_ai_detector_bert` /
+  `mgt_mini_chinese_bert` / `qiyuan_llm_detector_small_en` /
+  `raidar_rewrite` / `roberta_pu_detector`
+- 图像：`deepfake_defenders` / `mapnet` / `tamper_yolo`
+- 视频：`video_multihead_attention`
+
+`threshold` 不传时不再下发，由下游使用默认 0.55；`return_visuals` 不传时
+max 档默认开启，free/pro 不下发。
+
 ### safety
 
 | 字段 | CLI flags |
@@ -196,10 +207,10 @@ saitec-cli core skill list/get/search [--dir PATH]
 | `task_name` | `--task-name`（必填） |
 | `model_name` / `judge_model_name` | `--model-name` / `--judge-model-name` |
 | `prompts` | `--prompt`（可重复）或 `--prompts-file` |
-| `dataset` | `--dataset-file` / `--dataset-path` / `--dataset-source-type` / `--dataset-file-format` / `--dataset-data-format` |
-| `caller` | `--caller-adapter-type` / `--caller-model` / `--caller-api-key-env` / `--caller-base-url` / `--caller-timeout-seconds` |
-| `judge_caller` | `--judge-caller-*`（同上五项） |
-| `attacks.attack_names` | `--attack-name`（可重复） |
+| `dataset` | `--dataset-file` / `--dataset-path` / `--dataset-source-type` / `--dataset-file-format` / `--dataset-data-format`（缺省不下发 `data_format`，由下游识别） |
+| `caller` | `--caller-adapter-type` / `--caller-adapter-name` / `--caller-model` / `--caller-api-key-env` / `--caller-base-url` / `--caller-timeout-seconds` / `--caller-provider-block-response-text` |
+| `judge_caller` | `--judge-caller-*`（同上字段） |
+| `attacks.attack_names` | `--attack-name`（可重复；roleplay/ignore_previous/translation） |
 | `safety_rules_text` | `--safety-rules-text` 或 `--safety-rules-file` |
 | `risk_categories` | `--risk-category`（可重复） |
 
@@ -210,20 +221,24 @@ saitec-cli core skill list/get/search [--dir PATH]
 | 字段 | CLI flags |
 |---|---|
 | `judge_callers` | `--judge-caller-json '{...}'`（可重复） |
-| `judge_rounds` | `--judge-rounds` |
+| `judge_rounds` | `--judge-rounds`（1-10） |
 | `dimensions` | `--dimension`（可重复） |
-| `evaluation_mode` | `--evaluation-mode` |
-| `pass_threshold` / `partial_threshold` | `--pass-threshold` / `--partial-threshold` |
+| `evaluation_mode` | `--evaluation-mode`（standard / social_ideology_long_answer / social_ideology_long_answer_v2 / social_ideology_refusal_qa / social_ideology_generation_dual） |
+| `pass_threshold` / `partial_threshold` | `--pass-threshold` / `--partial-threshold`（0-1） |
 | `evaluation_rubric_text` | `--evaluation-rubric-text` 或 `--evaluation-rubric-file` |
-| `judge_max_retry` | `--judge-max-retry` |
-| `provider_block_response_text` | `--provider-block-response-text` 或 `--no-provider-block-response-text`（二选一；都不传则用服务端默认） |
-| `result_adapter` / `adapter_name` | `--result-adapter` / `--adapter-name` |
-| `resume_from_task_id` / `run_tag` | `--resume-from-task-id` / `--run-tag` |
+| `judge_max_retry` | `--judge-max-retry`（0-10） |
+| `resume_from_task_id` / `resume_from_run_tag` | `--resume-from-task-id` / `--resume-from-run-tag`（必须成对） |
 
-SiliconFlow 图像 caller（仅 general 支持）必填：`--caller-model`、`--caller-api-key-env`、
+> 下游 live 不接受顶层 `run_tag`、`provider_block_response_text`、
+> `result_adapter`、`adapter_name`；CLI 已移除这些 flags。provider 拦截文本用
+> `--caller-provider-block-response-text` / `--judge-caller-provider-block-response-text`；
+> caller 别名用 `--caller-adapter-name` / `--judge-caller-adapter-name`。
+
+图像生成 caller（仅 general 支持）支持 `siliconflow_image_generation` /
+`dashscope_image_generation`，必填：`--caller-model`、`--caller-api-key-env`、
 `--caller-output-dir`；额外：`--caller-image-size`、`--caller-batch-size`、
 `--caller-num-inference-steps`、`--caller-guidance-scale`、
-`--caller-negative-prompt`、`--caller-seed`。safety/corpus 的 caller 不支持 SiliconFlow。
+`--caller-negative-prompt`、`--caller-seed`。safety/corpus 的 caller 不支持图像生成 adapter。
 
 > 只给 caller 字段而不给 `--caller-adapter-type` 时，CLI 默认 `openai`；
 > Core 的请求默认 `echo` 只在 caller 整体省略时生效。`judge_callers` 用
@@ -237,9 +252,18 @@ SiliconFlow 图像 caller（仅 general 支持）必填：`--caller-model`、`--
 | `judge_model_name` | `--judge-model-name` |
 | `texts` | `--text`（可重复）或 `--texts-file` |
 | `dataset` | dataset 五件套 |
-| `judge_caller` | `--judge-caller-*` |
+| `judge_caller` | `--judge-caller-*`（含 adapter-name / provider-block-response-text） |
 | `chunking` | `--chunking-enabled/--no-chunking-enabled`、`--chunking-max-chars`、`--chunking-overlap-chars` |
 | `safety_rules_text` | `--safety-rules-text` 或 `--safety-rules-file` |
+
+### 旧 flags 迁移
+
+| 已移除 | 替代 |
+|---|---|
+| `--run-tag` | `--resume-from-task-id` + `--resume-from-run-tag`（成对） |
+| `--provider-block-response-text` / `--no-provider-block-response-text` | `--caller-provider-block-response-text` / `--judge-caller-provider-block-response-text`（字符串） |
+| `--adapter-name` | `--caller-adapter-name` / `--judge-caller-adapter-name` |
+| `--result-adapter` | 下游 live 无实际效果，已移除 |
 
 ## 8. 示例
 

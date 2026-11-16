@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import typer
 
@@ -25,6 +25,18 @@ from ._shared import (
 
 app = typer.Typer(help="AIGC 检测（text/image/video）")
 
+TextMethod = Literal[
+    "sample",
+    "radar",
+    "chinese_ai_detector_bert",
+    "mgt_mini_chinese_bert",
+    "qiyuan_llm_detector_small_en",
+    "raidar_rewrite",
+    "roberta_pu_detector",
+]
+ImageMethod = Literal["deepfake_defenders", "mapnet", "tamper_yolo"]
+VideoMethod = Literal["video_multihead_attention"]
+
 
 def _storage_uri(upload: Any) -> str:
     if not isinstance(upload, dict) or not upload.get("storage_uri"):
@@ -39,7 +51,7 @@ def detect_text_cmd(
     json_output: bool = typer.Option(False, "--json"),
     text: str | None = typer.Option(None, "--text", help="待检测文本"),
     text_file: Path | None = typer.Option(None, "--text-file", help="从文件读取文本"),
-    method: str | None = typer.Option(None, "--method", help="检测方法，默认 sample"),
+    method: TextMethod | None = typer.Option(None, "--method", help="检测方法，默认 sample"),
     threshold: float | None = typer.Option(None, "--threshold", help="判定阈值"),
     language: str | None = typer.Option(None, "--language", help="文本语言，默认 zh"),
     task_name: str | None = typer.Option(None, "--task-name"),
@@ -93,7 +105,7 @@ def detect_text_batch_cmd(
     dataset_source_type: str = typer.Option("server_path", "--dataset-source-type"),
     dataset_file_format: str | None = typer.Option(None, "--dataset-file-format", help="json/jsonl（缺省按扩展名）"),
     dataset_data_format: str = typer.Option("case_list", "--dataset-data-format", help="prompt_list/case_list"),
-    method: str | None = typer.Option(None, "--method"),
+    method: TextMethod | None = typer.Option(None, "--method"),
     threshold: float | None = typer.Option(None, "--threshold"),
     task_name: str | None = typer.Option(None, "--task-name"),
     wait: bool = typer.Option(False, "--wait"),
@@ -152,10 +164,10 @@ def detect_image_cmd(
     json_output: bool = typer.Option(False, "--json"),
     file: Path | None = typer.Option(None, "--file", help="本地图片（自动上传）"),
     image_uri: str | None = typer.Option(None, "--image-uri", help="已上传图片的 storage_uri"),
-    method: str | None = typer.Option(None, "--method", help="默认 deepfake_defenders"),
-    threshold: float | None = typer.Option(None, "--threshold"),
-    return_visuals: bool = typer.Option(
-        True, "--return-visuals/--no-return-visuals"
+    method: ImageMethod | None = typer.Option(None, "--method", help="默认 deepfake_defenders"),
+    threshold: float | None = typer.Option(None, "--threshold", help="不传由下游使用默认 0.55"),
+    return_visuals: bool | None = typer.Option(
+        None, "--return-visuals/--no-return-visuals"
     ),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
@@ -199,7 +211,11 @@ def detect_image_batch_cmd(
     json_output: bool = typer.Option(False, "--json"),
     items: Path | None = typer.Option(None, "--items", help="items JSON 文件"),
     files: list[Path] = typer.Option([], "--files", help="本地图片，可重复"),
-    method: str | None = typer.Option(None, "--method", help="默认 tamper_yolo"),
+    method: ImageMethod | None = typer.Option(None, "--method", help="默认 deepfake_defenders"),
+    threshold: float | None = typer.Option(None, "--threshold", help="不传由下游使用默认 0.55"),
+    return_visuals: bool | None = typer.Option(
+        None, "--return-visuals/--no-return-visuals"
+    ),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
     timeout: float = typer.Option(3600.0, "--timeout", min=0.1),
@@ -216,7 +232,12 @@ def detect_image_batch_cmd(
             for path in files:
                 uri = _storage_uri(await ops.upload_file(path, "image"))
                 item_list.append({"id": path.stem, "image_uri": uri})
-        payload = build_image_batch_payload(method=method, items=item_list)
+        payload = build_image_batch_payload(
+            method=method,
+            threshold=threshold,
+            return_visuals=return_visuals,
+            items=item_list,
+        )
         data = await ops.submit_batch_detection("image-detect", payload)
         return await submit_and_maybe_wait(
             ops,
@@ -239,7 +260,7 @@ def detect_video_cmd(
     json_output: bool = typer.Option(False, "--json"),
     file: Path | None = typer.Option(None, "--file", help="本地视频（自动上传）"),
     video_uri: str | None = typer.Option(None, "--video-uri", help="已上传视频的 storage_uri"),
-    method: str | None = typer.Option(None, "--method", help="默认 video_multihead_attention"),
+    method: VideoMethod | None = typer.Option(None, "--method", help="默认 video_multihead_attention"),
     threshold: float | None = typer.Option(None, "--threshold"),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
@@ -280,6 +301,12 @@ def detect_video_batch_cmd(
     json_output: bool = typer.Option(False, "--json"),
     items: Path | None = typer.Option(None, "--items", help="items JSON 文件"),
     files: list[Path] = typer.Option([], "--files", help="本地视频，可重复"),
+    method: VideoMethod | None = typer.Option(
+        None, "--method", help="默认 video_multihead_attention"
+    ),
+    threshold: float | None = typer.Option(
+        None, "--threshold", help="不传由下游使用默认 0.55"
+    ),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
     timeout: float = typer.Option(3600.0, "--timeout", min=0.1),
@@ -296,7 +323,9 @@ def detect_video_batch_cmd(
             for path in files:
                 uri = _storage_uri(await ops.upload_file(path, "video"))
                 item_list.append({"id": path.stem, "video_uri": uri})
-        payload = build_video_batch_payload(items=item_list)
+        payload = build_video_batch_payload(
+            method=method, threshold=threshold, items=item_list
+        )
         data = await ops.submit_batch_detection("video-detect", payload)
         return await submit_and_maybe_wait(
             ops,

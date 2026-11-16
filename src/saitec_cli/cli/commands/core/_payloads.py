@@ -83,10 +83,12 @@ def parse_judge_callers(raw_values: Iterable[str] | None) -> list[dict[str, Any]
 def build_caller(
     *,
     adapter_type: str | None = None,
+    adapter_name: str | None = None,
     model: str | None = None,
     api_key_env: str | None = None,
     base_url: str | None = None,
     timeout_seconds: int | None = None,
+    provider_block_response_text: str | None = None,
     image_size: str | None = None,
     batch_size: int | None = None,
     num_inference_steps: int | None = None,
@@ -95,16 +97,19 @@ def build_caller(
     seed: int | None = None,
     output_dir: str | None = None,
 ) -> dict[str, Any] | None:
-    """构造 CallerConfig；无任何字段时返回 None。
+    """构造下游兼容的 CallerConfig；无任何字段时返回 None。
 
-    SiliconFlow 图像 caller 的额外字段只在 adapter_type 匹配时允许。
+    图像生成 caller 的额外字段只在 adapter_type 为
+    siliconflow_image_generation / dashscope_image_generation 时允许。
     """
     base: dict[str, Any] = {}
     _include(base, "adapter_type", adapter_type)
+    _include(base, "adapter_name", adapter_name)
     _include(base, "model", model)
     _include(base, "api_key_env", api_key_env)
     _include(base, "base_url", base_url)
     _include(base, "timeout_seconds", timeout_seconds)
+    _include(base, "provider_block_response_text", provider_block_response_text)
 
     extra: dict[str, Any] = {}
     _include(extra, "image_size", image_size)
@@ -119,24 +124,37 @@ def build_caller(
         return None
 
     adapter = base.get("adapter_type") or "openai"
+    valid_adapters = {
+        "registry",
+        "echo",
+        "openai",
+        "siliconflow_image_generation",
+        "dashscope_image_generation",
+    }
+    if adapter not in valid_adapters:
+        raise ValueError(
+            "caller adapter-type 必须是 registry/echo/openai/"
+            "siliconflow_image_generation/dashscope_image_generation"
+        )
     base["adapter_type"] = adapter
 
-    if adapter == "siliconflow_image_generation":
+    image_adapters = (
+        "siliconflow_image_generation",
+        "dashscope_image_generation",
+    )
+    if adapter in image_adapters:
         for required in ("model", "api_key_env"):
             if not base.get(required):
                 raise ValueError(
-                    f"siliconflow_image_generation caller 需要 --caller-{required.replace('_', '-')}"
+                    f"{adapter} caller 需要 --caller-{required.replace('_', '-')}"
                 )
         if not extra.get("output_dir"):
-            raise ValueError(
-                "siliconflow_image_generation caller 需要 --caller-output-dir"
-            )
+            raise ValueError(f"{adapter} caller 需要 --caller-output-dir")
         body = {
             "adapter_type": adapter,
             "model": base["model"],
             "api_key_env": base["api_key_env"],
             "output_dir": extra["output_dir"],
-            "base_url": base.get("base_url") or "https://api.siliconflow.cn/v1",
             "timeout_seconds": base.get("timeout_seconds", 300),
             "image_size": extra.get("image_size", "1024x1024"),
             "batch_size": extra.get("batch_size", 1),
@@ -144,14 +162,25 @@ def build_caller(
             "guidance_scale": extra.get("guidance_scale", 7.5),
             "negative_prompt": extra.get("negative_prompt", ""),
         }
+        if base.get("base_url"):
+            body["base_url"] = base["base_url"]
+        elif adapter == "siliconflow_image_generation":
+            body["base_url"] = "https://api.siliconflow.cn/v1"
+        if base.get("adapter_name"):
+            body["adapter_name"] = base["adapter_name"]
+        if base.get("provider_block_response_text") is not None:
+            body["provider_block_response_text"] = base[
+                "provider_block_response_text"
+            ]
         if "seed" in extra:
             body["seed"] = extra["seed"]
         return body
 
     if extra:
         raise ValueError(
-            "SiliconFlow caller 字段（image-size/batch-size/...）仅适用于 "
-            "--caller-adapter-type siliconflow_image_generation"
+            "图像生成 caller 字段（image-size/batch-size/...）仅适用于 "
+            "--caller-adapter-type siliconflow_image_generation 或 "
+            "dashscope_image_generation"
         )
     return base
 
@@ -161,7 +190,7 @@ def build_dataset(
     *,
     source_type: str = "server_path",
     file_format: str | None = None,
-    data_format: str = "case_list",
+    data_format: str | None = None,
 ) -> dict[str, Any] | None:
     if not path:
         return None
@@ -178,16 +207,18 @@ def build_dataset(
             )
     if file_format not in ("json", "jsonl"):
         raise ValueError(f"dataset-file-format 必须是 json/jsonl，当前为 {file_format!r}")
-    if data_format not in ("prompt_list", "case_list"):
+    if data_format is not None and data_format not in ("prompt_list", "case_list"):
         raise ValueError(
             f"dataset-data-format 必须是 prompt_list/case_list，当前为 {data_format!r}"
         )
-    return {
+    dataset = {
         "source_type": source_type,
         "path": path,
         "file_format": file_format,
-        "data_format": data_format,
     }
+    if data_format is not None:
+        dataset["data_format"] = data_format
+    return dataset
 
 
 def build_text_detect_payload(
@@ -246,12 +277,18 @@ def build_image_payload(
 
 
 def build_image_batch_payload(
-    *, method: str | None, items: list[dict[str, Any]]
+    *,
+    method: str | None,
+    threshold: float | None,
+    return_visuals: bool | None,
+    items: list[dict[str, Any]],
 ) -> dict[str, Any]:
     if not items:
         raise ValueError("image-batch 需要 items 或 --files")
     payload: dict[str, Any] = {"items": items}
     _include(payload, "method", method)
+    _include(payload, "threshold", threshold)
+    _include(payload, "return_visuals", return_visuals)
     return payload
 
 
@@ -267,10 +304,18 @@ def build_video_payload(
     return payload
 
 
-def build_video_batch_payload(*, items: list[dict[str, Any]]) -> dict[str, Any]:
+def build_video_batch_payload(
+    *,
+    method: str | None,
+    threshold: float | None,
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
     if not items:
         raise ValueError("video-batch 需要 items 或 --files")
-    return {"items": items}
+    payload: dict[str, Any] = {"items": items}
+    _include(payload, "method", method)
+    _include(payload, "threshold", threshold)
+    return payload
 
 
 def build_safety_payload(
@@ -294,6 +339,16 @@ def build_safety_payload(
     _include(payload, "caller", caller)
     _include(payload, "judge_caller", judge_caller)
     if attack_names:
+        invalid = set(attack_names) - {
+            "roleplay",
+            "ignore_previous",
+            "translation",
+        }
+        if invalid:
+            raise ValueError(
+                f"attack-name 仅支持 roleplay/ignore_previous/translation，"
+                f"收到: {sorted(invalid)}"
+            )
         payload["attacks"] = {"attack_names": list(attack_names)}
     _include(payload, "safety_rules_text", safety_rules_text)
     _include(payload, "risk_categories", risk_categories)
@@ -317,12 +372,37 @@ def build_general_payload(
     partial_threshold: float | None,
     evaluation_rubric_text: str | None,
     judge_max_retry: int | None,
-    provider_block_response_text: bool | None,
-    result_adapter: str | None,
-    adapter_name: str | None,
     resume_from_task_id: str | None,
-    run_tag: str | None,
+    resume_from_run_tag: str | None,
 ) -> dict[str, Any]:
+    valid_modes = {
+        "standard",
+        "social_ideology_long_answer",
+        "social_ideology_long_answer_v2",
+        "social_ideology_refusal_qa",
+        "social_ideology_generation_dual",
+    }
+    if evaluation_mode is not None and evaluation_mode not in valid_modes:
+        raise ValueError(
+            "evaluation-mode 必须是 standard/social_ideology_long_answer/"
+            "social_ideology_long_answer_v2/social_ideology_refusal_qa/"
+            "social_ideology_generation_dual"
+        )
+    if judge_rounds is not None and not 1 <= judge_rounds <= 10:
+        raise ValueError("judge-rounds 必须在 1-10")
+    if judge_max_retry is not None and not 0 <= judge_max_retry <= 10:
+        raise ValueError("judge-max-retry 必须在 0-10")
+    for name, value in (
+        ("pass-threshold", pass_threshold),
+        ("partial-threshold", partial_threshold),
+    ):
+        if value is not None and not 0.0 <= value <= 1.0:
+            raise ValueError(f"{name} 必须在 0-1")
+    if bool(resume_from_task_id) != bool(resume_from_run_tag):
+        raise ValueError(
+            "--resume-from-task-id 与 --resume-from-run-tag 必须同时提供"
+        )
+
     payload: dict[str, Any] = {"task_name": task_name}
     _include(payload, "model_name", model_name)
     _include(payload, "judge_model_name", judge_model_name)
@@ -338,12 +418,8 @@ def build_general_payload(
     _include(payload, "partial_threshold", partial_threshold)
     _include(payload, "evaluation_rubric_text", evaluation_rubric_text)
     _include(payload, "judge_max_retry", judge_max_retry)
-    if provider_block_response_text is not None:
-        payload["provider_block_response_text"] = provider_block_response_text
-    _include(payload, "result_adapter", result_adapter)
-    _include(payload, "adapter_name", adapter_name)
     _include(payload, "resume_from_task_id", resume_from_task_id)
-    _include(payload, "run_tag", run_tag)
+    _include(payload, "resume_from_run_tag", resume_from_run_tag)
     return payload
 
 
@@ -379,6 +455,12 @@ def build_chunking(
         raise ValueError("chunking-max-chars 必须 > 0")
     if overlap_chars is not None and overlap_chars < 0:
         raise ValueError("chunking-overlap-chars 必须 >= 0")
+    if (
+        max_chars is not None
+        and overlap_chars is not None
+        and overlap_chars >= max_chars
+    ):
+        raise ValueError("chunking-overlap-chars 必须小于 chunking-max-chars")
     body: dict[str, Any] = {}
     if enabled is not None:
         body["enabled"] = enabled

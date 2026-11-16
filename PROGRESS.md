@@ -5,6 +5,20 @@
 >
 > **命名变更**：2026-11-11 起项目更名 SAITEC-Cli；下方历史条目中的 `ssgc` / `saitec-safe-guard-cli` 是当时的真实记录，保留原貌。
 
+## 2026-11-16
+
+### fix(core): 对齐 CZY live 评测/检测契约 （待提交）
+`core eval` / `core detect` 与下游 live 评测引擎（18080–18083）收敛：
+- 评测：`evaluation_mode` 改 5 值枚举；`judge_rounds`/`judge_max_retry`/
+  threshold 加范围；`resume_from_task_id` + `resume_from_run_tag` 强制成对；
+  移除下游不接受的 `--run-tag`、顶层 provider/result/adapter flags，改用
+  caller/judge-caller 内嵌字段。
+- 检测：method 改为下游实际枚举；单图/单视频不再默认下发 threshold，
+  return_visuals 三态（max 才默认开启）；image-batch/video-batch 补齐
+  threshold/visuals/method；`--dataset-data-format` 默认省略。
+- 新增 `docs/integration/core-api.md` 迁移表；验证：全量 pytest 397 passed；
+  下方契约检查脚本无阻塞漂移。
+
 ## 2026-11-12
 
 ### feat: core 子命令直连 Core 平台（检测/评测/文件/任务） <9c146c0>

@@ -253,6 +253,11 @@ saitec-cli core eval corpus --task-name t --text "..." --wait --json
 
 - 检测/评测的字段、默认值、互斥关系见 `docs/integration/core-api.md` §7。
 - `pipeline_tier` 不暴露；服务端按订阅注入。
+- 检测 `threshold` 默认不下发，`return_visuals` 未传时 max 档才默认开启；
+  free/pro 不要显式传 threshold/visuals，否则下游 403。
+- 评测 `--evaluation-mode` 5 值；`--resume-from-task-id` 必须与
+  `--resume-from-run-tag` 同时使用。下游不接受 `--run-tag` 和顶层
+  provider/result/adapter flags。
 - 评测前用 `core credentials set` 注入 `model_id` 对应凭证。
 
 ### 任务产物

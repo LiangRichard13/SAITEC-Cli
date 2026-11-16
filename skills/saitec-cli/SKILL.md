@@ -87,6 +87,8 @@ saitec-cli core skill list
 - 任务状态只有 `running/succeeded/failed`；取消 = `failed + "Cancelled by user"`。
 - 文件上传返回的 `storage_uri` 可直接用于 `--image-uri` / `--video-uri` / `--dataset-path`。
 - `core eval` 的所有请求字段都展开为 flags；`judge_callers` 用可重复 `--judge-caller-json '{...}'`。
+- 检测 `method` 只接受下游 live 枚举：文本 7 个（sample/radar/chinese_ai_detector_bert/mgt_mini_chinese_bert/qiyuan_llm_detector_small_en/raidar_rewrite/roberta_pu_detector）、图像 3 个、视频 1 个。
+- 下游 live 不接受 `--run-tag`、顶层 provider/result/adapter flags；迁移见 `docs/integration/core-api.md` §7「旧 flags 迁移」。
 - 完整契约（端点/字段/错误码）见 `../../docs/integration/core-api.md` 与 [references/operations.md](references/operations.md) §6。
 
 ## 命令速查

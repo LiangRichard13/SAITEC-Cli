@@ -496,7 +496,7 @@ def test_core_eval_safety_payload(core_env):
             "core", "eval", "safety", "--task-name", "t",
             "--prompt", "p", "--caller-model", "m",
             "--caller-api-key-env", "K", "--judge-model-name", "j",
-            "--attack-name", "a", "--risk-category", "r",
+            "--attack-name", "roleplay", "--risk-category", "r",
             "--safety-rules-text", "rules", "--json",
         ],
     )
@@ -513,42 +513,55 @@ def test_core_eval_safety_payload(core_env):
             "api_key_env": "K",
         },
         "judge_model_name": "j",
-        "attacks": {"attack_names": ["a"]},
+        "attacks": {"attack_names": ["roleplay"]},
         "safety_rules_text": "rules",
         "risk_categories": ["r"],
     }
 
 
-def test_core_eval_general_payload_with_provider_false(core_env):
+def test_core_eval_general_payload_with_nested_provider_text(core_env):
     result = runner.invoke(
         app,
         [
             "core", "eval", "general", "--task-name", "t",
             "--prompt", "p", "--judge-caller-json",
             '{"adapter_type": "openai", "model": "j"}',
-            "--dimension", "d1", "--no-provider-block-response-text", "--json",
+            "--dimension", "d1",
+            "--caller-provider-block-response-text", "blocked",
+            "--json",
         ],
     )
     assert result.exit_code == 0
     _, kwargs = FakeOps.last.calls[-1]
     payload = kwargs["payload"]
-    assert payload["provider_block_response_text"] is False
+    assert payload["caller"]["provider_block_response_text"] == "blocked"
+    assert "provider_block_response_text" not in payload
     assert payload["judge_callers"] == [{"adapter_type": "openai", "model": "j"}]
     assert payload["dimensions"] == ["d1"]
 
 
-def test_core_eval_general_provider_flags_conflict(core_env):
+def test_core_eval_general_resume_pair_conflict(core_env):
     result = runner.invoke(
         app,
         [
             "core", "eval", "general", "--task-name", "t",
-            "--provider-block-response-text",
-            "--no-provider-block-response-text", "--json",
+            "--prompt", "p", "--resume-from-task-id", "prev-1", "--json",
         ],
     )
     assert result.exit_code == 1
     assert _json(result)["error"]["code"] == "INVALID_ARGUMENT"
     assert not any(c[0] == "submit_eval" for c in FakeOps.last.calls)
+
+
+def test_core_eval_rejects_removed_run_tag_flag(core_env):
+    result = runner.invoke(
+        app,
+        [
+            "core", "eval", "general", "--task-name", "t",
+            "--prompt", "p", "--run-tag", "nightly", "--json",
+        ],
+    )
+    assert result.exit_code == 2
 
 
 def test_core_eval_corpus_payload(core_env):
@@ -658,3 +671,102 @@ def test_core_skill_list_get_search(tmp_path: Path):
     )
     assert searched.exit_code == 0
     assert _json(searched)["data"]["matches"][0]["file"] == "alpha.md"
+
+
+def test_core_detect_image_omits_default_threshold_and_visuals(core_env, tmp_path: Path):
+    image = tmp_path / "x.png"
+    image.write_bytes(b"png")
+    result = runner.invoke(
+        app, ["core", "detect", "image", "--file", str(image), "--json"]
+    )
+    assert result.exit_code == 0
+    payload = FakeOps.last.calls[-1][1]["payload"]
+    assert "threshold" not in payload
+    assert "return_visuals" not in payload
+
+
+def test_core_detect_image_batch_supports_threshold_and_visuals(core_env, tmp_path: Path):
+    image = tmp_path / "x.png"
+    image.write_bytes(b"png")
+    result = runner.invoke(
+        app,
+        [
+            "core", "detect", "image-batch",
+            "--files", str(image),
+            "--method", "mapnet",
+            "--threshold", "0.7",
+            "--no-return-visuals",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0
+    payload = FakeOps.last.calls[-1][1]["payload"]
+    assert payload["method"] == "mapnet"
+    assert payload["threshold"] == 0.7
+    assert payload["return_visuals"] is False
+
+
+def test_core_detect_video_batch_supports_method_and_threshold(core_env, tmp_path: Path):
+    video = tmp_path / "x.mp4"
+    video.write_bytes(b"mp4")
+    result = runner.invoke(
+        app,
+        [
+            "core", "detect", "video-batch",
+            "--files", str(video),
+            "--method", "video_multihead_attention",
+            "--threshold", "0.6",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0
+    payload = FakeOps.last.calls[-1][1]["payload"]
+    assert payload["method"] == "video_multihead_attention"
+    assert payload["threshold"] == 0.6
+
+
+def test_core_detect_invalid_method_is_usage_error(core_env):
+    result = runner.invoke(
+        app,
+        ["core", "detect", "text", "--text", "x", "--method", "bogus", "--json"],
+    )
+    assert result.exit_code == 2
+
+
+def test_core_eval_invalid_mode_is_usage_error(core_env):
+    result = runner.invoke(
+        app,
+        [
+            "core", "eval", "general", "--task-name", "t",
+            "--prompt", "p", "--evaluation-mode", "strict", "--json",
+        ],
+    )
+    assert result.exit_code == 2
+
+
+def test_core_eval_judge_rounds_range_is_usage_error(core_env):
+    result = runner.invoke(
+        app,
+        [
+            "core", "eval", "general", "--task-name", "t",
+            "--prompt", "p", "--judge-rounds", "11", "--json",
+        ],
+    )
+    assert result.exit_code == 2
+
+
+def test_core_eval_resume_pair_is_forwarded(core_env):
+    result = runner.invoke(
+        app,
+        [
+            "core", "eval", "general", "--task-name", "t",
+            "--prompt", "p",
+            "--resume-from-task-id", "prev-1",
+            "--resume-from-run-tag", "nightly",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 0
+    payload = FakeOps.last.calls[-1][1]["payload"]
+    assert payload["resume_from_task_id"] == "prev-1"
+    assert payload["resume_from_run_tag"] == "nightly"

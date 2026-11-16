@@ -34,7 +34,7 @@ def test_safety_all_fields():
         dataset={"path": "/d"},
         caller={"adapter_type": "openai"},
         judge_caller={"adapter_type": "echo"},
-        attack_names=["a1", "a2"],
+        attack_names=["roleplay", "ignore_previous"],
         safety_rules_text="rules",
         risk_categories=["r1", "r2"],
     )
@@ -46,7 +46,7 @@ def test_safety_all_fields():
         "dataset": {"path": "/d"},
         "caller": {"adapter_type": "openai"},
         "judge_caller": {"adapter_type": "echo"},
-        "attacks": {"attack_names": ["a1", "a2"]},
+        "attacks": {"attack_names": ["roleplay", "ignore_previous"]},
         "safety_rules_text": "rules",
         "risk_categories": ["r1", "r2"],
     }
@@ -86,11 +86,8 @@ def test_general_all_fields():
         partial_threshold=0.6,
         evaluation_rubric_text="rubric",
         judge_max_retry=2,
-        provider_block_response_text=False,
-        result_adapter="adapter",
-        adapter_name="name",
         resume_from_task_id="task-0",
-        run_tag="tag",
+        resume_from_run_tag="tag",
     )
     assert payload == {
         "task_name": "t",
@@ -107,11 +104,8 @@ def test_general_all_fields():
         "partial_threshold": 0.6,
         "evaluation_rubric_text": "rubric",
         "judge_max_retry": 2,
-        "provider_block_response_text": False,
-        "result_adapter": "adapter",
-        "adapter_name": "name",
         "resume_from_task_id": "task-0",
-        "run_tag": "tag",
+        "resume_from_run_tag": "tag",
     }
     assert "pipeline_tier" not in payload
 
@@ -133,11 +127,8 @@ def test_general_omits_unset_optional_fields():
         partial_threshold=None,
         evaluation_rubric_text="",
         judge_max_retry=None,
-        provider_block_response_text=None,
-        result_adapter=None,
-        adapter_name=None,
         resume_from_task_id=None,
-        run_tag=None,
+        resume_from_run_tag=None,
     )
     assert payload == {"task_name": "t"}
 
@@ -202,6 +193,112 @@ def test_build_caller_rejects_siliconflow_fields_for_openai():
         build_caller(adapter_type="openai", model="m", image_size="512x512")
 
 
+def test_build_caller_supports_registry_and_nested_fields():
+    caller = build_caller(
+        adapter_type="registry",
+        adapter_name="my-adapter",
+        provider_block_response_text="blocked",
+    )
+    assert caller == {
+        "adapter_type": "registry",
+        "adapter_name": "my-adapter",
+        "provider_block_response_text": "blocked",
+    }
+    with pytest.raises(ValueError, match="adapter-type"):
+        build_caller(adapter_type="bogus")
+
+
+def test_build_caller_supports_dashscope_image_generation():
+    caller = build_caller(
+        adapter_type="dashscope_image_generation",
+        model="wanx",
+        api_key_env="DASHSCOPE_KEY",
+        output_dir="/tmp/out",
+        base_url="https://dashscope.aliyuncs.com/api/v1",
+    )
+    assert caller["adapter_type"] == "dashscope_image_generation"
+    assert caller["base_url"] == "https://dashscope.aliyuncs.com/api/v1"
+    assert caller["output_dir"] == "/tmp/out"
+
+
+def test_build_general_payload_validates_contract():
+    with pytest.raises(ValueError, match="evaluation-mode"):
+        build_general_payload(
+            task_name="t",
+            model_name=None,
+            judge_model_name=None,
+            prompts=["p"],
+            dataset=None,
+            caller=None,
+            judge_caller=None,
+            judge_callers=None,
+            judge_rounds=None,
+            dimensions=[],
+            evaluation_mode="strict",
+            pass_threshold=None,
+            partial_threshold=None,
+            evaluation_rubric_text="",
+            judge_max_retry=None,
+            resume_from_task_id=None,
+            resume_from_run_tag=None,
+        )
+    with pytest.raises(ValueError, match="judge-rounds"):
+        build_general_payload(
+            task_name="t",
+            model_name=None,
+            judge_model_name=None,
+            prompts=["p"],
+            dataset=None,
+            caller=None,
+            judge_caller=None,
+            judge_callers=None,
+            judge_rounds=11,
+            dimensions=[],
+            evaluation_mode=None,
+            pass_threshold=None,
+            partial_threshold=None,
+            evaluation_rubric_text="",
+            judge_max_retry=None,
+            resume_from_task_id=None,
+            resume_from_run_tag=None,
+        )
+    with pytest.raises(ValueError, match="同时提供"):
+        build_general_payload(
+            task_name="t",
+            model_name=None,
+            judge_model_name=None,
+            prompts=["p"],
+            dataset=None,
+            caller=None,
+            judge_caller=None,
+            judge_callers=None,
+            judge_rounds=None,
+            dimensions=[],
+            evaluation_mode=None,
+            pass_threshold=None,
+            partial_threshold=None,
+            evaluation_rubric_text="",
+            judge_max_retry=None,
+            resume_from_task_id="prev-1",
+            resume_from_run_tag=None,
+        )
+
+
+def test_build_safety_payload_rejects_invalid_attack_name():
+    with pytest.raises(ValueError, match="attack-name"):
+        build_safety_payload(
+            task_name="t",
+            model_name=None,
+            judge_model_name=None,
+            prompts=["p"],
+            dataset=None,
+            caller=None,
+            judge_caller=None,
+            attack_names=["bogus"],
+            safety_rules_text=None,
+            risk_categories=None,
+        )
+
 def test_parse_judge_callers():
     assert parse_judge_callers(None) is None
     assert parse_judge_callers([]) is None
@@ -234,9 +331,9 @@ def test_build_dataset_infers_format():
         "source_type": "server_path",
         "path": "/x/data.jsonl",
         "file_format": "jsonl",
-        "data_format": "case_list",
     }
     assert build_dataset("/x/data.json")["file_format"] == "json"
+    assert build_dataset("/x/data.json", data_format="case_list")["data_format"] == "case_list"
     assert build_dataset(None) is None
     with pytest.raises(ValueError):
         build_dataset("/x", file_format="csv")
@@ -306,26 +403,53 @@ def test_text_batch_requires_exactly_one_mode():
     }
 
 
-def test_image_payloads_do_not_include_unsupported_batch_fields():
+def test_image_batch_payload_supports_threshold_and_visuals():
     assert build_image_payload(
         image_uri="/x.png", method=None, threshold=None, return_visuals=None
     ) == {"image_uri": "/x.png"}
     assert build_image_batch_payload(
-        method=None, items=[{"image_uri": "/x.png"}]
+        method=None,
+        threshold=None,
+        return_visuals=None,
+        items=[{"image_uri": "/x.png"}],
     ) == {"items": [{"image_uri": "/x.png"}]}
+    assert build_image_batch_payload(
+        method="mapnet",
+        threshold=0.7,
+        return_visuals=True,
+        items=[{"image_uri": "/x.png"}],
+    ) == {
+        "method": "mapnet",
+        "threshold": 0.7,
+        "return_visuals": True,
+        "items": [{"image_uri": "/x.png"}],
+    }
     with pytest.raises(ValueError):
-        build_image_batch_payload(method=None, items=[])
+        build_image_batch_payload(
+            method=None, threshold=None, return_visuals=None, items=[]
+        )
 
 
-def test_video_payloads_do_not_include_unsupported_batch_fields():
+def test_video_batch_payload_supports_method_and_threshold():
     assert build_video_payload(
         video_uri="/x.mp4", method=None, threshold=None
     ) == {"video_uri": "/x.mp4"}
-    assert build_video_batch_payload(items=[{"video_uri": "/x.mp4"}]) == {
-        "items": [{"video_uri": "/x.mp4"}]
+    assert build_video_batch_payload(
+        method=None,
+        threshold=None,
+        items=[{"video_uri": "/x.mp4"}],
+    ) == {"items": [{"video_uri": "/x.mp4"}]}
+    assert build_video_batch_payload(
+        method="video_multihead_attention",
+        threshold=0.6,
+        items=[{"video_uri": "/x.mp4"}],
+    ) == {
+        "method": "video_multihead_attention",
+        "threshold": 0.6,
+        "items": [{"video_uri": "/x.mp4"}],
     }
     with pytest.raises(ValueError):
-        build_video_batch_payload(items=[])
+        build_video_batch_payload(method=None, threshold=None, items=[])
 
 
 def test_build_chunking():
