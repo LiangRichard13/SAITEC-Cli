@@ -87,7 +87,11 @@ saitec-cli core skill list
 - 任务状态只有 `running/succeeded/failed`；取消 = `failed + "Cancelled by user"`。
 - 文件上传返回的 `storage_uri` 可直接用于 `--image-uri` / `--video-uri` / `--dataset-path`。
 - `core eval` 的所有请求字段都展开为 flags；`judge_callers` 用可重复 `--judge-caller-json '{...}'`。
+- 评测输入 `prompts|dataset`、`texts|dataset` 必须恰好一个；`--resume-from-task-id` 与 `--resume-from-run-tag` 必须成对。
+- caller 非空时必须显式 `--caller-adapter-type`（registry/echo/openai/siliconflow_image_generation/dashscope_image_generation）；DashScope 还需显式 `--caller-base-url`。
+- dataset 的 `file_format` 按 `.json/.jsonl` 推断；`--dataset-data-format` 缺省使用 live 默认 `prompt_list`，`case_list` 需显式传。
 - 检测 `method` 只接受下游 live 枚举：文本 7 个（sample/radar/chinese_ai_detector_bert/mgt_mini_chinese_bert/qiyuan_llm_detector_small_en/raidar_rewrite/roberta_pu_detector）、图像 3 个、视频 1 个。
+- 检测 `--threshold` 缺省不下发（下游默认 0.55）；`--return-visuals` 三态，不传时 max 档才默认开启，free/pro 不要传。
 - 下游 live 不接受 `--run-tag`、顶层 provider/result/adapter flags；迁移见 `docs/integration/core-api.md` §7「旧 flags 迁移」。
 - 完整契约（端点/字段/错误码）见 `../../docs/integration/core-api.md` 与 [references/operations.md](references/operations.md) §6。
 
@@ -132,10 +136,16 @@ saitec-cli tail [--service NAME]           # 实时跟踪当日 records JSONL �
 # 直接调用 Core 平台（与 safe_guard 共用 detector.url/api_key）
 saitec-cli core status --json              # 健康 + 鉴权 + 任务数
 saitec-cli core models list --json
+saitec-cli core credentials set --skill safety-eval|general-eval|corpus-safety-eval --env-name ENV --model-id UUID --json
 saitec-cli core detect text --text "..." [--wait] --json
+saitec-cli core detect text-batch --items items.json [--wait] --json
 saitec-cli core detect image --file ./x.png [--wait] --json
+saitec-cli core detect image-batch --files a.png --files b.png [--wait] --json
+saitec-cli core detect video --file ./x.mp4 [--wait] --json
+saitec-cli core detect video-batch --files a.mp4 --files b.mp4 [--wait] --json
 saitec-cli core eval safety|general|corpus [全部参数] [--wait] --json
 saitec-cli core file upload PATH [--type image|video|dataset|output|log|report] --json
+saitec-cli core file list|read ... --json
 saitec-cli core file download FILE_ID [-o PATH] [--overwrite] --json
 saitec-cli core task list|get|wait|cancel|artifacts ... --json
 saitec-cli core skill list|get|search [--dir PATH] --json

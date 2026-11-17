@@ -8,7 +8,7 @@
 
 [![PyPI](https://img.shields.io/badge/pypi-saitec--cli-3775A9?style=flat-square&logo=pypi&logoColor=white)](https://pypi.org/project/saitec-cli/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-390%20passed-2EA043?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-414%20passed-2EA043?style=flat-square)](tests/)
 [![License](https://img.shields.io/badge/license-proprietary-CB3627?style=flat-square)](LICENSE)
 
 [快速上手](#-快速上手) · [特性](#-特性) · [工作原理](#-工作原理) · [命令速查](#-命令速查) · [用户手册](docs/user-guide.md) · [Detector 对接](docs/integration/detector-api.md) · [Core API](docs/integration/core-api.md)
@@ -137,7 +137,7 @@ Claude Code ──请求──→ ① 本地代理端口(9001..)
 | 配置 | `init` · `validate` · `config get/set/unset/list` · `service add/remove/set/list` |
 | 生命周期 | `start` · `monitor` · `stop` · `restart` · `status` · `logs` |
 | 运维 | `report` · `redo` · `purge` · `export` |
-| Core 平台 | `core status` · `core models list` · `core credentials set` · `core file upload/download/list/read` · `core detect text/image/video` · `core eval safety/general/corpus` · `core task list/get/wait/cancel/artifacts` · `core skill list/get/search` |
+| Core 平台 | `core status` · `core models list` · `core credentials set` · `core file upload/download/list/read` · `core detect text/image/video（含 *-batch）` · `core eval safety/general/corpus` · `core task list/get/wait/cancel/artifacts` · `core skill list/get/search` |
 | 调试 | `doctor` · `tail` |
 
 所有 `core` 叶子命令支持 `--json`，除 `core skill` 外支持 `--config <path>`；`monitor` 专为人设计、无 `--json`。完整用法与排错见 **[`docs/user-guide.md`](docs/user-guide.md)**。
@@ -163,7 +163,7 @@ src/saitec_cli/
 ├── adapters/   # L3 三协议解析（SSE 流重组）
 ├── proxy/      # L4 反向代理核心（catch-all 透传）
 ├── runtime/    # L5 编排：代理上报循环 + core_ops 平台操作
-└── cli/        # L6 typer 入口 + 14 个顶层命令 + config/service/core 子命令组
+└── cli/        # L6 typer 入口 + 17 个顶层命令 + config/service/core 子命令组
 
 tests/          # 镜像分层单测 + mock_detector 联调桩 + test_chat 三协议探针 + verification 双重验证清单
 docs/           # user-guide / how-it-works / design / integration（detector-api、core-api）
