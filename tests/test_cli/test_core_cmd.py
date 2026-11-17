@@ -494,7 +494,8 @@ def test_core_eval_safety_payload(core_env):
         app,
         [
             "core", "eval", "safety", "--task-name", "t",
-            "--prompt", "p", "--caller-model", "m",
+            "--prompt", "p", "--caller-adapter-type", "openai",
+            "--caller-model", "m",
             "--caller-api-key-env", "K", "--judge-model-name", "j",
             "--attack-name", "roleplay", "--risk-category", "r",
             "--safety-rules-text", "rules", "--json",
@@ -527,6 +528,7 @@ def test_core_eval_general_payload_with_nested_provider_text(core_env):
             "--prompt", "p", "--judge-caller-json",
             '{"adapter_type": "openai", "model": "j"}',
             "--dimension", "d1",
+            "--caller-adapter-type", "openai",
             "--caller-provider-block-response-text", "blocked",
             "--json",
         ],
@@ -770,3 +772,11 @@ def test_core_eval_resume_pair_is_forwarded(core_env):
     payload = FakeOps.last.calls[-1][1]["payload"]
     assert payload["resume_from_task_id"] == "prev-1"
     assert payload["resume_from_run_tag"] == "nightly"
+
+
+def test_core_detect_threshold_out_of_range_is_usage_error(core_env):
+    result = runner.invoke(
+        app,
+        ["core", "detect", "text", "--text", "x", "--threshold", "1.5", "--json"],
+    )
+    assert result.exit_code == 2

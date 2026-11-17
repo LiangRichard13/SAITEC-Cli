@@ -166,7 +166,7 @@ saitec-cli core file list [--skip --limit]
 saitec-cli core file read FILE_ID
 
 saitec-cli core detect text --text/--text-file ... [--method --threshold --language --task-name] [--wait]
-saitec-cli core detect text-batch --items/--dataset-file/--dataset-path ... [--wait]
+saitec-cli core detect text-batch --items/--dataset-file/--dataset-path ... [--method --threshold --task-name --dataset-data-format] [--wait]
 saitec-cli core detect image --file/--image-uri ... [--method --threshold --return-visuals] [--wait]
 saitec-cli core detect image-batch --items/--files ... [--method --threshold --return-visuals] [--wait]
 saitec-cli core detect video --file/--video-uri ... [--method --threshold] [--wait]
@@ -207,7 +207,7 @@ max 档默认开启，free/pro 不下发。
 | `task_name` | `--task-name`（必填） |
 | `model_name` / `judge_model_name` | `--model-name` / `--judge-model-name` |
 | `prompts` | `--prompt`（可重复）或 `--prompts-file` |
-| `dataset` | `--dataset-file` / `--dataset-path` / `--dataset-source-type` / `--dataset-file-format` / `--dataset-data-format`（缺省不下发 `data_format`，由下游识别） |
+| `dataset` | `--dataset-file` / `--dataset-path` / `--dataset-source-type` / `--dataset-file-format` / `--dataset-data-format`（缺省不下发 `data_format`；live 默认 `prompt_list`，`case_list` 请显式传；CZY HEAD 才自动识别） |
 | `caller` | `--caller-adapter-type` / `--caller-adapter-name` / `--caller-model` / `--caller-api-key-env` / `--caller-base-url` / `--caller-timeout-seconds` / `--caller-provider-block-response-text` |
 | `judge_caller` | `--judge-caller-*`（同上字段） |
 | `attacks.attack_names` | `--attack-name`（可重复；roleplay/ignore_previous/translation） |
@@ -240,8 +240,8 @@ max 档默认开启，free/pro 不下发。
 `--caller-num-inference-steps`、`--caller-guidance-scale`、
 `--caller-negative-prompt`、`--caller-seed`。safety/corpus 的 caller 不支持图像生成 adapter。
 
-> 只给 caller 字段而不给 `--caller-adapter-type` 时，CLI 默认 `openai`；
-> Core 的请求默认 `echo` 只在 caller 整体省略时生效。`judge_callers` 用
+> caller 非空时必须显式给 `--caller-adapter-type`；CLI/MCP/Agent 都不再
+> 默默回退到 openai/echo/registry。`judge_callers` 用
 > `--judge-caller-json` 时必须显式包含 `adapter_type`，且不允许明文 `api_key`。
 
 ### corpus

@@ -16,8 +16,11 @@
 - 检测：method 改为下游实际枚举；单图/单视频不再默认下发 threshold，
   return_visuals 三态（max 才默认开启）；image-batch/video-batch 补齐
   threshold/visuals/method；`--dataset-data-format` 默认省略。
-- 新增 `docs/integration/core-api.md` 迁移表；验证：全量 pytest 397 passed；
-  下方契约检查脚本无阻塞漂移。
+- 对抗审查补修：caller 非空必须显式 adapter-type；chunking 单值按 Core
+  默认联合校验；detect threshold 加 0–1；judge_callers 拒图像 adapter/
+  未知字段；dataset source_type 只允许 server_path；resume 值 strip。
+- 新增 `docs/integration/core-api.md` 迁移表；验证：全量 pytest 414 passed；
+  Core 契约检查无阻塞漂移。
 
 ## 2026-11-12
 

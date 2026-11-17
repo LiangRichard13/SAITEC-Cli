@@ -153,8 +153,10 @@ def test_corpus_all_fields():
     }
 
 
-def test_build_caller_defaults_to_openai_when_fields_present():
-    assert build_caller(model="deepseek") == {
+def test_build_caller_requires_explicit_adapter_type_when_fields_present():
+    with pytest.raises(ValueError, match="adapter-type"):
+        build_caller(model="deepseek")
+    assert build_caller(adapter_type="openai", model="deepseek") == {
         "adapter_type": "openai",
         "model": "deepseek",
     }
@@ -471,3 +473,73 @@ def test_load_items_file_accepts_utf8_bom(tmp_path):
     p = tmp_path / "items.json"
     p.write_bytes(b"\xef\xbb\xbf" + b'[{"id": "1", "text": "x"}]')
     assert load_items_file(p) == [{"id": "1", "text": "x"}]
+
+
+def test_build_chunking_validates_against_effective_defaults():
+    with pytest.raises(ValueError, match="小于"):
+        build_chunking(enabled=None, max_chars=100, overlap_chars=None)
+    with pytest.raises(ValueError, match="小于"):
+        build_chunking(enabled=None, max_chars=None, overlap_chars=5000)
+    assert build_chunking(enabled=None, max_chars=5000, overlap_chars=None) == {
+        "max_chars": 5000
+    }
+
+
+def test_build_dataset_rejects_non_server_path_and_infers_file_format():
+    assert build_dataset("/x/data.json") == {
+        "source_type": "server_path",
+        "path": "/x/data.json",
+        "file_format": "json",
+    }
+    assert build_dataset("/x/data.jsonl")["file_format"] == "jsonl"
+    with pytest.raises(ValueError, match="server_path"):
+        build_dataset("/x/data.json", source_type="bogus")
+
+
+def test_build_caller_dashscope_requires_base_url():
+    with pytest.raises(ValueError, match="caller-base-url"):
+        build_caller(
+            adapter_type="dashscope_image_generation",
+            model="wanx",
+            api_key_env="DASHSCOPE_KEY",
+            output_dir="/tmp/out",
+        )
+
+
+def test_parse_judge_callers_rejects_image_generation_and_unknown_fields():
+    with pytest.raises(ValueError, match="siliconflow"):
+        parse_judge_callers(
+            ['{"adapter_type": "siliconflow_image_generation"}']
+        )
+    with pytest.raises(ValueError, match="dashscope"):
+        parse_judge_callers(
+            ['{"adapter_type": "dashscope_image_generation"}']
+        )
+    with pytest.raises(ValueError, match="未知字段"):
+        parse_judge_callers(
+            ['{"adapter_type": "openai", "unknown": 1}']
+        )
+
+
+def test_build_general_payload_strips_resume_values():
+    payload = build_general_payload(
+        task_name="t",
+        model_name=None,
+        judge_model_name=None,
+        prompts=["p"],
+        dataset=None,
+        caller=None,
+        judge_caller=None,
+        judge_callers=None,
+        judge_rounds=None,
+        dimensions=[],
+        evaluation_mode=None,
+        pass_threshold=None,
+        partial_threshold=None,
+        evaluation_rubric_text="",
+        judge_max_retry=None,
+        resume_from_task_id=" prev-1 ",
+        resume_from_run_tag=" nightly ",
+    )
+    assert payload["resume_from_task_id"] == "prev-1"
+    assert payload["resume_from_run_tag"] == "nightly"

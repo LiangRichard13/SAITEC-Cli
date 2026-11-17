@@ -74,8 +74,25 @@ def parse_judge_callers(raw_values: Iterable[str] | None) -> list[dict[str, Any]
             raise ValueError(
                 "judge-caller-json 必须显式包含 adapter_type（如 openai/echo）"
             )
-        if adapter_type == "siliconflow_image_generation":
-            raise ValueError("judge_caller 不支持 siliconflow_image_generation")
+        if adapter_type not in {"registry", "echo", "openai"}:
+            raise ValueError(
+                "judge_caller 仅支持 registry/echo/openai；"
+                f"收到 {adapter_type!r}"
+            )
+        allowed_keys = {
+            "adapter_type",
+            "adapter_name",
+            "model",
+            "api_key_env",
+            "base_url",
+            "timeout_seconds",
+            "provider_block_response_text",
+        }
+        unknown = set(value) - allowed_keys
+        if unknown:
+            raise ValueError(
+                f"judge-caller-json 包含未知字段: {sorted(unknown)}"
+            )
         result.append(value)
     return result or None
 
@@ -123,7 +140,13 @@ def build_caller(
     if not base and not extra:
         return None
 
-    adapter = base.get("adapter_type") or "openai"
+    adapter = base.get("adapter_type")
+    if not adapter:
+        raise ValueError(
+            "caller 非空时必须显式提供 adapter-type"
+            "（registry/echo/openai/siliconflow_image_generation/"
+            "dashscope_image_generation）"
+        )
     valid_adapters = {
         "registry",
         "echo",
@@ -166,6 +189,10 @@ def build_caller(
             body["base_url"] = base["base_url"]
         elif adapter == "siliconflow_image_generation":
             body["base_url"] = "https://api.siliconflow.cn/v1"
+        else:
+            raise ValueError(
+                "dashscope_image_generation caller 需要显式 --caller-base-url"
+            )
         if base.get("adapter_name"):
             body["adapter_name"] = base["adapter_name"]
         if base.get("provider_block_response_text") is not None:
@@ -194,6 +221,8 @@ def build_dataset(
 ) -> dict[str, Any] | None:
     if not path:
         return None
+    if source_type != "server_path":
+        raise ValueError("dataset-source-type 仅支持 server_path")
     if file_format is None:
         lower = path.lower()
         if lower.endswith(".jsonl"):
@@ -398,6 +427,8 @@ def build_general_payload(
     ):
         if value is not None and not 0.0 <= value <= 1.0:
             raise ValueError(f"{name} 必须在 0-1")
+    resume_from_task_id = (resume_from_task_id or "").strip() or None
+    resume_from_run_tag = (resume_from_run_tag or "").strip() or None
     if bool(resume_from_task_id) != bool(resume_from_run_tag):
         raise ValueError(
             "--resume-from-task-id 与 --resume-from-run-tag 必须同时提供"
@@ -455,11 +486,9 @@ def build_chunking(
         raise ValueError("chunking-max-chars 必须 > 0")
     if overlap_chars is not None and overlap_chars < 0:
         raise ValueError("chunking-overlap-chars 必须 >= 0")
-    if (
-        max_chars is not None
-        and overlap_chars is not None
-        and overlap_chars >= max_chars
-    ):
+    effective_max = 4000 if max_chars is None else max_chars
+    effective_overlap = 200 if overlap_chars is None else overlap_chars
+    if effective_overlap >= effective_max:
         raise ValueError("chunking-overlap-chars 必须小于 chunking-max-chars")
     body: dict[str, Any] = {}
     if enabled is not None:

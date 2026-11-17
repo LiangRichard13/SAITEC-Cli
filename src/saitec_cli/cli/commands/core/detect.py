@@ -52,7 +52,7 @@ def detect_text_cmd(
     text: str | None = typer.Option(None, "--text", help="待检测文本"),
     text_file: Path | None = typer.Option(None, "--text-file", help="从文件读取文本"),
     method: TextMethod | None = typer.Option(None, "--method", help="检测方法，默认 sample"),
-    threshold: float | None = typer.Option(None, "--threshold", help="判定阈值"),
+    threshold: float | None = typer.Option(None, "--threshold", min=0.0, max=1.0, help="判定阈值 0-1"),
     language: str | None = typer.Option(None, "--language", help="文本语言，默认 zh"),
     task_name: str | None = typer.Option(None, "--task-name"),
     wait: bool = typer.Option(False, "--wait", help="轮询到终态"),
@@ -104,9 +104,13 @@ def detect_text_batch_cmd(
     dataset_path: str | None = typer.Option(None, "--dataset-path", help="已上传文件的 storage_uri"),
     dataset_source_type: str = typer.Option("server_path", "--dataset-source-type"),
     dataset_file_format: str | None = typer.Option(None, "--dataset-file-format", help="json/jsonl（缺省按扩展名）"),
-    dataset_data_format: str = typer.Option("case_list", "--dataset-data-format", help="prompt_list/case_list"),
+    dataset_data_format: str | None = typer.Option(
+        None,
+        "--dataset-data-format",
+        help="prompt_list/case_list；缺省使用下游默认（live=prompt_list）；case_list 请显式传",
+    ),
     method: TextMethod | None = typer.Option(None, "--method"),
-    threshold: float | None = typer.Option(None, "--threshold"),
+    threshold: float | None = typer.Option(None, "--threshold", min=0.0, max=1.0),
     task_name: str | None = typer.Option(None, "--task-name"),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
@@ -165,7 +169,7 @@ def detect_image_cmd(
     file: Path | None = typer.Option(None, "--file", help="本地图片（自动上传）"),
     image_uri: str | None = typer.Option(None, "--image-uri", help="已上传图片的 storage_uri"),
     method: ImageMethod | None = typer.Option(None, "--method", help="默认 deepfake_defenders"),
-    threshold: float | None = typer.Option(None, "--threshold", help="不传由下游使用默认 0.55"),
+    threshold: float | None = typer.Option(None, "--threshold", min=0.0, max=1.0, help="不传由下游使用默认 0.55"),
     return_visuals: bool | None = typer.Option(
         None, "--return-visuals/--no-return-visuals"
     ),
@@ -212,7 +216,7 @@ def detect_image_batch_cmd(
     items: Path | None = typer.Option(None, "--items", help="items JSON 文件"),
     files: list[Path] = typer.Option([], "--files", help="本地图片，可重复"),
     method: ImageMethod | None = typer.Option(None, "--method", help="默认 deepfake_defenders"),
-    threshold: float | None = typer.Option(None, "--threshold", help="不传由下游使用默认 0.55"),
+    threshold: float | None = typer.Option(None, "--threshold", min=0.0, max=1.0, help="不传由下游使用默认 0.55"),
     return_visuals: bool | None = typer.Option(
         None, "--return-visuals/--no-return-visuals"
     ),
@@ -261,7 +265,7 @@ def detect_video_cmd(
     file: Path | None = typer.Option(None, "--file", help="本地视频（自动上传）"),
     video_uri: str | None = typer.Option(None, "--video-uri", help="已上传视频的 storage_uri"),
     method: VideoMethod | None = typer.Option(None, "--method", help="默认 video_multihead_attention"),
-    threshold: float | None = typer.Option(None, "--threshold"),
+    threshold: float | None = typer.Option(None, "--threshold", min=0.0, max=1.0),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
     timeout: float = typer.Option(3600.0, "--timeout", min=0.1),
@@ -305,7 +309,7 @@ def detect_video_batch_cmd(
         None, "--method", help="默认 video_multihead_attention"
     ),
     threshold: float | None = typer.Option(
-        None, "--threshold", help="不传由下游使用默认 0.55"
+        None, "--threshold", min=0.0, max=1.0, help="不传由下游使用默认 0.55"
     ),
     wait: bool = typer.Option(False, "--wait"),
     interval: float = typer.Option(5.0, "--interval", min=0.1),
